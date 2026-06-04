@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Pomodoro timer — Rofi-powered with polybar integration.
+
+Usage:
+    pomodoro              Launch the rofi UI
+    pomodoro status       Print polybar status line
+    pomodoro toggle       Pause/resume current session
+    pomodoro stop         Stop current session
+"""
+
+import sys
+from pathlib import Path
+
+# Ensure the project root is on sys.path so 'pomodoro_lib' is importable
+_project_root = Path(__file__).resolve().parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from pomodoro_lib.main import main
+
+if __name__ == "__main__":
+    main()
