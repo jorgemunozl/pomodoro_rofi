@@ -21,6 +21,13 @@ def notify(summary: str, body: str = "", urgency: str = "normal") -> None:
     )
 
 
+def i3_workspace() -> None:
+    subprocess.run(
+        ["i3-msg", "workspace --no-auto-back-and-forth pomodoro 🍅"],
+        capture_output=True,
+    )
+
+
 def mpv_cmd(json_cmd: str) -> None:
     """Send a command to the MPV IPC socket."""
     if MPV_SOCKET.exists():
@@ -34,15 +41,8 @@ def mpv_cmd(json_cmd: str) -> None:
 
 def start_mpv(video: str) -> None:
     """Launch mpv with the given video file."""
+    i3_workspace()
     if video and Path(video).exists():
-        proc_before = subprocess.Popen(
-            ["i3-msg", "workspace", "--no-auto-back-and-forth", "pomodoro", "🍅"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # run i3-msg to switch to pomodoro workspace before mpv
-        proc_before.wait()
-
         proc = subprocess.Popen(
             [
                 "mpv",
@@ -70,13 +70,6 @@ def kill_mpv() -> None:
             pass
     PID_FILE.unlink(missing_ok=True)
     MPV_SOCKET.unlink(missing_ok=True)
-
-
-def i3_workspace() -> None:
-    subprocess.run(
-        ["i3-msg", "workspace", "--no-auto-back-and-forth", "pomodoro 🍅"],
-        capture_output=True,
-    )
 
 
 # ── TimerController ───────────────────────────────────────────────────────────
@@ -124,7 +117,6 @@ class TimerController:
             phase="work",
         )
         self.save_state()
-        i3_workspace()
         start_mpv(video)
         notify(
             "🍅 Pomodoro started",
@@ -152,6 +144,11 @@ class TimerController:
             self._thread.join(timeout=1.0)
         self._stop_event.clear()
         self._thread = None
+        # Pause mpv during work phase, kill during break
+        if state.phase == "work":
+            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+        else:
+            kill_mpv()
         notify("🍅 Pomodoro paused", f"{secs_left // 60}m left")
 
     def resume(self) -> None:
@@ -162,6 +159,14 @@ class TimerController:
         self.state = PomodoroState.load(STATE_FILE)
         self.state.end_ts = time.time() + secs_left
         self.save_state()
+
+        # Resume/restart mpv based on phase
+        if self.state.phase == "work":
+            if MPV_SOCKET.exists():
+                mpv_cmd('{"command": ["set_property", "pause", false]}\n')
+            else:
+                start_mpv(self.state.video)
+
         notify(
             "🍅 Pomodoro resumed",
             f"{secs_left // 60}m left — "
@@ -218,6 +223,9 @@ class TimerController:
             self._on_break_end()
 
     def _on_work_end(self) -> None:
+        # Kill mpv when work session ends
+        kill_mpv()
+
         if self.state.current >= self.state.total:
             notify(
                 "🍅 All done!",

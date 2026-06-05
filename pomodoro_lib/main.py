@@ -158,6 +158,12 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
             step = 3
 
         elif step == 3:
+            if video_name in INCLUDE_DURATION_FILES:
+                # Ask for the duration
+                work_min = break_min = total = 0
+            else:
+                # Dont ask for the duration
+
             labels = [l for l, _, _ in DURATION_PRESETS] + [CUSTOM_LABEL, BACK_LABEL]
             choice = rofi_menu("Pick duration", labels)
             if choice is None:
