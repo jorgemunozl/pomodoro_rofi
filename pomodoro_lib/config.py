@@ -1,7 +1,7 @@
 """Paths, presets, and defaults for the pomodoro timer."""
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 XDG_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -19,6 +19,21 @@ TASKS_UNIQUE = POMO_CONFIG / "tasks_unique"
 HISTORY_FILE = POMO_CONFIG / "history"
 
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
+
+INCLUDE_DURATION_FILES = ["dr.mp4", "nate.mp4", "steven.mp4"]
+
+
+brain_fm = [(25, 5), (50, 10, 2), (25, 5)]
+
+POMODORO_DEFAULTS = [
+    ("christmas_2025-I.webm", 25, 5, 4),
+    ("dawn_2025-II.mp4", 25, 5, 8),
+    ("mine_2025-II.webm", 25, 5, 4),
+    ("shinjuku2.mp4", 25, 5, 8),
+    ("study.mp4", 25, 5, 5),
+    ("brain_fm.mp4", brain_fm),
+]
+
 
 # ── Duration presets ──────────────────────────────────────────────────────────
 # (label, work_min, break_min)

@@ -11,10 +11,36 @@ Usage:
 import sys
 from pathlib import Path
 
-# Ensure the project root is on sys.path so 'pomodoro_lib' is importable
-_project_root = Path(__file__).resolve().parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+
+def _find_project_root() -> Path | None:
+    """Locate the project root directory containing pomodoro_lib.
+
+    Tries, in order:
+      1. Parent of the installed script (works when running from the repo)
+      2. $HOME/project/pomodoro_rofi (canonical dev location)
+    """
+    # 1. Script's own directory
+    own = Path(__file__).resolve().parent
+    if (own / "pomodoro_lib").is_dir():
+        return own
+
+    # 2. Canonical project path
+    home = Path.home()
+    for candidate in [
+        home / "project" / "pomodoro_rofi",
+        home / "repos" / "pomodoro_rofi",
+        home / "code" / "pomodoro_rofi",
+        home / "src" / "pomodoro_rofi",
+    ]:
+        if (candidate / "pomodoro_lib").is_dir():
+            return candidate
+
+    return None
+
+
+root = _find_project_root()
+if root is not None and str(root) not in sys.path:
+    sys.path.insert(0, str(root))
 
 from pomodoro_lib.main import main
 
