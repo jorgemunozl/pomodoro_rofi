@@ -19,11 +19,6 @@ from pomodoro_lib.config import (
     TASKS_FILE,
     TASKS_UNIQUE,
 )
-from pomodoro_lib.heatmap import (
-    generate_heatmap_data,
-    parse_history,
-    show_heatmap_rofi,
-)
 from pomodoro_lib.rofi import (
     numbered_menu,
     pick_video,
@@ -38,7 +33,22 @@ from pomodoro_lib.timer import TimerController, notify
 
 
 def _status_line() -> str:
-    """Polybar status line. Empty string when no session is active."""
+    """Polybar status line. Empty string when no session is active.
+
+    Also handles expired phase transitions so that polybar's periodic
+    polling keeps the session moving forward even if the background
+    timer thread was killed when the UI process exited.
+    """
+    if not STATE_FILE.exists():
+        return ""
+
+    # Handle any expired phases BEFORE computing the status line.
+    # This is the *reliable* transition mechanism – the daemon timer
+    # threads started by the UI are only a best-effort optimisation.
+    ctrl = TimerController()
+    ctrl.handle_expired()
+
+    # Re-check after transition (e.g. the session may have completed)
     if not STATE_FILE.exists():
         return ""
 
@@ -357,10 +367,26 @@ def _handle_change_task(ctrl: TimerController) -> None:
 
 
 def _handle_heatmap() -> None:
-    """Show heat map and statistics in a rofi window."""
-    records = parse_history(HISTORY_FILE)
-    data = generate_heatmap_data(records)
-    show_heatmap_rofi(data, HISTORY_FILE)
+    """Launch the Textual interactive heatmap in a new terminal."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Find project root (same logic as pomodoro script)
+    root = Path(__file__).resolve().parent.parent
+    if not (root / "pomodoro_lib").is_dir():
+        root = Path.home() / "project" / "pomodoro_rofi"
+
+    subprocess.Popen(
+        [
+            "alacritty",
+            "-e",
+            sys.executable,
+            "-m",
+            "pomodoro_lib.heatmap_app",
+        ],
+        cwd=str(root),
+    )
 
 
 # ── Subcommand dispatch ───────────────────────────────────────────────────────

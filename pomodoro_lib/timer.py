@@ -163,11 +163,8 @@ class TimerController:
             self._thread.join(timeout=1.0)
         self._stop_event.clear()
         self._thread = None
-        # Pause mpv during work phase, kill during break
-        if state.phase == "work":
-            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
-        else:
-            kill_mpv()
+        # Pause mpv (video plays continuously across all phases)
+        mpv_cmd('{"command": ["set_property", "pause", true]}\n')
         notify("🍅 Pomodoro paused", f"{secs_left // 60}m left")
 
     def resume(self) -> None:
@@ -190,12 +187,9 @@ class TimerController:
         self.state.end_ts = time.time() + secs_left
         self.save_state()
 
-        # Resume/restart mpv based on phase
-        if self.state.phase == "work":
-            if MPV_SOCKET.exists():
-                mpv_cmd('{"command": ["set_property", "pause", false]}\n')
-            else:
-                start_mpv(self.state.video)
+        # Unpause mpv (video was paused, never killed)
+        if MPV_SOCKET.exists():
+            mpv_cmd('{"command": ["set_property", "pause", false]}\n')
 
         notify(
             "🍅 Pomodoro resumed",
@@ -266,21 +260,11 @@ class TimerController:
             return  # stopped by pause/stop
         callback()
 
-    # ── Phase transitions ─────────────────────────────────────────────────────
-    def _on_phase_end(self) -> None:
-        if not STATE_FILE.exists():
-            return  # no active session
-        self.state = PomodoroState.load(STATE_FILE)
-        if not self.state.is_active:
-            return
-        if self.state.phase == "work":
-            self._on_work_end()
-        else:
-            self._on_break_end()
+    # ── Phase transitions (side effects, no timer management) ─────────────────
 
-    def _on_work_end(self) -> None:
-        # Kill mpv when work session ends
-        kill_mpv()
+    def _transition_work_to_break(self) -> None:
+        """Work → break: update state, notify. Does NOT start a timer.
+        The video keeps playing uninterrupted across work/break cycles."""
 
         if self.state.current >= self.state.total:
             notify(
@@ -310,13 +294,12 @@ class TimerController:
             urgency="critical",
         )
 
-        self._run_timer(self.state.break_min * 60, self._on_phase_end)
-
-    def _on_break_end(self) -> None:
+    def _transition_break_to_work(self) -> None:
+        """Break → work: update state, notify. Does NOT start a timer.
+        The video is already playing from the initial `start()` call."""
         self.state.phase = "work"
         self.state.end_ts = time.time() + self.state.work_min * 60
         self.save_state()
-        start_mpv(self.state.video)
 
         notify(
             "🍅 Break over!",
@@ -325,4 +308,70 @@ class TimerController:
             urgency="critical",
         )
 
-        self._run_timer(self.state.work_min * 60, self._on_phase_end)
+    # ── Phase transitions (full: side effects + timer management) ────────────
+
+    def _on_phase_end(self) -> None:
+        if not STATE_FILE.exists():
+            return  # no active session
+        self.state = PomodoroState.load(STATE_FILE)
+        if not self.state.is_active:
+            return
+        self._dispatch_transition()
+
+    def _dispatch_transition(self) -> None:
+        """Perform the transition for the current phase and start a timer for the
+        new phase.  This is only reliable when the calling process stays alive."""
+        if self.state.phase == "work":
+            self._transition_work_to_break()
+            if STATE_FILE.exists() and self.state.phase == "break":
+                self._run_timer(self.state.break_min * 60, self._on_phase_end)
+        else:
+            self._transition_break_to_work()
+            if STATE_FILE.exists() and self.state.phase == "work":
+                self._run_timer(self.state.work_min * 60, self._on_phase_end)
+
+    def _on_work_end(self) -> None:
+        """Called by the timer thread when a work period expires."""
+        if not STATE_FILE.exists():
+            return
+        self.state = PomodoroState.load(STATE_FILE)
+        if not self.state.is_active or self.state.phase != "work":
+            return
+        self._dispatch_transition()
+
+    def _on_break_end(self) -> None:
+        """Called by the timer thread when a break period expires."""
+        if not STATE_FILE.exists():
+            return
+        self.state = PomodoroState.load(STATE_FILE)
+        if not self.state.is_active or self.state.phase != "break":
+            return
+        self._dispatch_transition()
+
+    # ── Expired-phase check (polybar-driven transitions) ─────────────────────
+
+    def handle_expired(self) -> None:
+        """Check if the current phase has expired *since the last check* and
+        transition if needed.  Safe to call from the polybar status subcommand
+        (which runs in a fresh, short-lived process).
+
+        This is the *reliable* transition mechanism.  The daemon timer threads
+        are a best-effort optimisation for immediate notifications when the
+        original UI process is still alive.
+        """
+        if not STATE_FILE.exists():
+            return
+        if PAUSE_FILE.exists():
+            return  # paused – do not advance
+
+        state = PomodoroState.load(STATE_FILE)
+        if not state.is_active:
+            return
+        if state.remaining_seconds > 0:
+            return  # not yet expired
+
+        self.state = state
+        if state.phase == "work":
+            self._transition_work_to_break()
+        else:
+            self._transition_break_to_work()
