@@ -12,9 +12,9 @@ from pomodoro_lib.config import (
     DEFAULT_TASKS,
     DURATION_PRESETS,
     HISTORY_FILE,
-    INCLUDE_DURATION_FILES,
     PAUSE_FILE,
     POMO_DIR,
+    POMODORO_DEFAULTS,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
@@ -149,6 +149,19 @@ def _handle_manage(tm: TaskManager) -> None:
             tm.delete(task, file_path)
 
 
+def _lookup_default_rhythm(video_name: str) -> tuple[int, int, int] | None:
+    """Return (work_min, break_min, total) if video has a default rhythm, else None."""
+    for entry in POMODORO_DEFAULTS:
+        if entry[0] == video_name:
+            if isinstance(entry[1], list):
+                # brain_fm style: list of (work, break, ...) tuples, take the first
+                first = entry[1][0]
+                count = first[2] if len(first) >= 3 else 1
+                return (first[0], first[1], count)
+            return (entry[1], entry[2], entry[3])
+    return None
+
+
 def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
     """New session flow: step-based loop with Back navigation."""
     tasks = tm.all_tasks()
@@ -158,7 +171,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
 
     step = 1  # 1=task, 2=video, 3=duration, 4=count
     task = video = ""
-    video_name = ""  # scoped for duration-step check
+    video_name = ""
     work_min = break_min = total = 0
 
     while True:
@@ -180,60 +193,76 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
                 continue
             video_name = choice
             video = str(POMO_DIR / video_name)
+
+            # Check if this video has a default rhythm in POMODORO_DEFAULTS
+            default_rhythm = _lookup_default_rhythm(video_name)
+            if default_rhythm is not None:
+                rhythm_choice = rofi_menu(
+                    "Rhythm",
+                    ["🎯  Default rhythm", "✏️  Personalized rhythm", BACK_LABEL],
+                    no_custom=True,
+                )
+                if rhythm_choice is None:
+                    return  # ESC → exit
+                if rhythm_choice == BACK_LABEL:
+                    step = 1  # back to task selection
+                    continue
+                if "Default" in rhythm_choice:
+                    work_min, break_min, total = default_rhythm
+                    ctrl.start(task, video, work_min, break_min, total)
+                    return
+                # Personalized → fall through to step 3
+
+            # For personalized rhythm or non-default videos, show duration picker
             step = 3
 
         elif step == 3:
-            # Only show duration picker for videos listed in INCLUDE_DURATION_FILES
-            if video_name and video_name in INCLUDE_DURATION_FILES:
-                labels = [label for label, _, _ in DURATION_PRESETS] + [
-                    CUSTOM_LABEL,
-                    BACK_LABEL,
-                ]
-                choice = rofi_menu("Pick duration", labels)
-                if choice is None:
-                    return  # ESC → exit
-                if choice == BACK_LABEL:
-                    step = 2
-                    continue
+            labels = [label for label, _, _ in DURATION_PRESETS] + [
+                CUSTOM_LABEL,
+                BACK_LABEL,
+            ]
+            choice = rofi_menu("Pick duration", labels)
+            if choice is None:
+                return  # ESC → exit
+            if choice == BACK_LABEL:
+                step = 2
+                continue
 
-                found = False
-                for label, w, b in DURATION_PRESETS:
-                    if choice == label:
+            found = False
+            for label, w, b in DURATION_PRESETS:
+                if choice == label:
+                    work_min, break_min = w, b
+                    found = True
+                    break
+
+            if not found and choice == CUSTOM_LABEL:
+                while True:
+                    custom = rofi_menu("Work-break (e.g. 10-5)", [BACK_LABEL])
+                    if custom is None:
+                        return  # ESC
+                    if custom == BACK_LABEL:
+                        break  # back to duration picker
+                    try:
+                        parts = custom.split("-")
+                        if len(parts) != 2:
+                            raise ValueError
+                        w, b = int(parts[0]), int(parts[1])
+                        if w <= 0 or b <= 0:
+                            raise ValueError
                         work_min, break_min = w, b
                         found = True
                         break
+                    except (ValueError, IndexError):
+                        notify(
+                            "Pomodoro",
+                            "Invalid format. Use e.g. 10-5",
+                            urgency="critical",
+                        )
+                if not found:
+                    continue  # back to duration picker
 
-                if not found and choice == CUSTOM_LABEL:
-                    while True:
-                        custom = rofi_menu("Work-break (e.g. 10-5)", [BACK_LABEL])
-                        if custom is None:
-                            return  # ESC
-                        if custom == BACK_LABEL:
-                            break  # back to duration picker
-                        try:
-                            parts = custom.split("-")
-                            if len(parts) != 2:
-                                raise ValueError
-                            w, b = int(parts[0]), int(parts[1])
-                            if w <= 0 or b <= 0:
-                                raise ValueError
-                            work_min, break_min = w, b
-                            found = True
-                            break
-                        except (ValueError, IndexError):
-                            notify(
-                                "Pomodoro",
-                                "Invalid format. Use e.g. 10-5",
-                                urgency="critical",
-                            )
-                    if not found:
-                        continue  # back to duration picker
-
-                if found:
-                    step = 4
-            else:
+            if found:
                 step = 4
-                continue
 
         elif step == 4:
             count_labels = [label for label, _ in COUNT_OPTIONS] + [BACK_LABEL]
@@ -248,7 +277,6 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
                     total = c
                     ctrl.start(task, video, work_min, break_min, total)
                     return
-            # Invalid → re-prompt
 
 
 def _handle_status(ctrl: TimerController) -> None:

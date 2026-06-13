@@ -20,11 +20,13 @@ HISTORY_FILE = POMO_CONFIG / "history"
 
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
 
+
 INCLUDE_DURATION_FILES = ["dr.mp4", "nate.mp4", "steven.mp4"]
 
-
+# Variable pomodoro, one of 25-5, two 50-10-2, and 25-5
 brain_fm = [(25, 5), (50, 10, 2), (25, 5)]
 
+# Pomodoro minutes, break minutes, repetitions
 POMODORO_DEFAULTS = [
     ("christmas_2025-I.webm", 25, 5, 4),
     ("dawn_2025-II.mp4", 25, 5, 8),
