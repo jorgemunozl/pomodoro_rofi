@@ -56,7 +56,7 @@ def _status_line() -> str:
 
     mins = secs // 60
     secs_rem = secs % 60
-    return f"{icon} {mins:02d}:{secs_rem:02d}"
+    return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
 
 # ── Handlers (called from main loop) ──────────────────────────────────────────
@@ -162,12 +162,15 @@ def _lookup_default_rhythm(video_name: str) -> tuple[int, int, int] | None:
     return None
 
 
-def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
-    """New session flow: step-based loop with Back navigation."""
+def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
+    """New session flow: step-based loop with Back navigation.
+
+    Returns True if a session was started, False if the user cancelled.
+    """
     tasks = tm.all_tasks()
     if not tasks:
         notify("Pomodoro", "No tasks available. Add tasks first.")
-        return
+        return False
 
     step = 1  # 1=task, 2=video, 3=duration, 4=count
     task = video = ""
@@ -178,16 +181,16 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
         if step == 1:
             choice = numbered_menu("Pick task", tasks)
             if choice is None:
-                return  # ESC → exit
+                return False  # ESC → exit
             if choice == BACK_LABEL:
-                return  # back to main menu
+                return False  # back to main menu
             task = strip_number(choice)
             step = 2
 
         elif step == 2:
             choice = pick_video(POMO_DIR)
             if choice is None:
-                return  # ESC → exit
+                return False  # ESC → exit
             if choice == BACK_LABEL:
                 step = 1
                 continue
@@ -203,14 +206,14 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
                     no_custom=True,
                 )
                 if rhythm_choice is None:
-                    return  # ESC → exit
+                    return False  # ESC → exit
                 if rhythm_choice == BACK_LABEL:
                     step = 1  # back to task selection
                     continue
                 if "Default" in rhythm_choice:
                     work_min, break_min, total = default_rhythm
                     ctrl.start(task, video, work_min, break_min, total)
-                    return
+                    return True
                 # Personalized → fall through to step 3
 
             # For personalized rhythm or non-default videos, show duration picker
@@ -223,7 +226,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
             ]
             choice = rofi_menu("Pick duration", labels)
             if choice is None:
-                return  # ESC → exit
+                return False  # ESC → exit
             if choice == BACK_LABEL:
                 step = 2
                 continue
@@ -239,7 +242,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
                 while True:
                     custom = rofi_menu("Work-break (e.g. 10-5)", [BACK_LABEL])
                     if custom is None:
-                        return  # ESC
+                        return False  # ESC
                     if custom == BACK_LABEL:
                         break  # back to duration picker
                     try:
@@ -268,7 +271,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
             count_labels = [label for label, _ in COUNT_OPTIONS] + [BACK_LABEL]
             choice = rofi_menu("How many?", count_labels)
             if choice is None:
-                return  # ESC → exit
+                return False  # ESC → exit
             if choice == BACK_LABEL:
                 step = 3
                 continue
@@ -276,7 +279,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
                 if choice == label:
                     total = c
                     ctrl.start(task, video, work_min, break_min, total)
-                    return
+                    return True
 
 
 def _handle_status(ctrl: TimerController) -> None:
@@ -421,7 +424,8 @@ def _run_ui() -> None:
         if action.startswith("📊"):
             _handle_status(ctrl)
         elif action.startswith("▶"):
-            _handle_new_session(tm, ctrl)
+            if _handle_new_session(tm, ctrl):
+                sys.exit(0)
         elif action.startswith("✅"):
             _handle_complete(tm)
         elif action.startswith("📝"):

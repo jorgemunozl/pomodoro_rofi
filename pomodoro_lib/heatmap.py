@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from pomodoro_lib.config import ROFI_THEME
+
 
 def parse_history(history_path: Path) -> list[dict[str, Any]]:
     """Parse history file, returning list of dicts with date, task, duration_min, sessions.
@@ -175,102 +177,146 @@ def generate_heatmap_data(records: list[dict]) -> dict[str, Any]:
     }
 
 
-def _intensity(count: int, max_count: int) -> str:
-    """Map a count to a Unicode fill character based on ratio of max."""
-    if max_count <= 0:
-        return "  "
+# GitHub dark-mode green scale
+_GREEN_LEVELS = [
+    "#0e4429",  # level 1 (lightest)
+    "#006d32",  # level 2
+    "#26a641",  # level 3
+    "#39d353",  # level 4 (darkest)
+]
+
+
+def _intensity_color(count: int, max_count: int) -> str:
+    """Map a count to a GitHub-style green hex color. Empty string for no activity."""
+    if max_count <= 0 or count <= 0:
+        return ""
     ratio = count / max_count
-    if ratio >= 0.75:
-        return "██"  # full
-    if ratio >= 0.50:
-        return "▓▓"  # medium
-    if ratio >= 0.25:
-        return "▒▒"  # low
-    return "░░"  # very low
+    idx = min(int(ratio * 4), 3)  # 0..3
+    return _GREEN_LEVELS[idx]
+
+
+def _month_label_weeks(weeks: list[date]) -> list[str]:
+    """Build a list of month labels aligned to the week columns.
+
+    Returns one label per week (empty string for weeks without a month transition).
+    """
+    labels: list[str] = []
+    prev_month = -1
+    for week_start in weeks:
+        m = week_start.month
+        if m != prev_month:
+            labels.append(week_start.strftime("%b"))
+            prev_month = m
+        else:
+            labels.append("")
+    return labels
+
+
+def _cell_markup(count: int, max_count: int) -> str:
+    """Return Pango markup for a single green contribution dot."""
+    color = _intensity_color(count, max_count)
+    if not color:
+        return "<span foreground='#21262d'>●</span>"  # dim dot for no activity
+    return f"<span foreground='{color}'>●</span>"
+
+
+def _pango_escape(text: str) -> str:
+    """Escape special Pango characters."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _wrap_markup(text: str) -> str:
+    """Wrap line in <span> to ensure valid Pango markup."""
+    return f"<span>{_pango_escape(text)}</span>"
 
 
 def format_heatmap_table(data: dict[str, Any]) -> str:
-    """Format a Unicode heat map grid showing weeks with data.
+    """Format a heat map grid in GitHub contribution-graph style.
 
-    Columns are days (Mon–Sun), rows are weeks.
-    Each cell uses a fill character to indicate relative intensity.
-    Only weeks containing data (plus one buffer week before) are shown.
+    Rows are days (Mon–Sun), columns are weeks.
+    Each cell is a green circle ● with intensity-based shading.
+    Returns Pango-markup lines (not escaped — already formatted).
     """
     daily = data.get("daily", {})
     today = date.today()
 
     if not daily:
-        return "No data yet."
+        return _wrap_markup("No data yet.")
 
-    active_dates = list(daily.keys())
     max_sessions = max(info["sessions"] for info in daily.values())
 
-    # Find the range: one week before earliest data through today
-    earliest_data = min(active_dates)
+    earliest_data = min(daily.keys())
 
-    # Align to Monday
+    # Align to Monday, start one week before earliest data
     start = earliest_data - timedelta(days=earliest_data.weekday())
     end = today
 
-    lines: list[str] = []
-
-    def _label(d: date) -> str:
-        """Short week label like 'Jun  2' or 'Jun  9'."""
-        return d.strftime("%b %d").replace(" 0", "  ")
-
+    # Build list of week-start Mondays
+    weeks: list[date] = []
     cursor = start
     while cursor <= end:
-        cells: list[str] = []
-        has_data_this_week = False
-        for i in range(7):
-            d = cursor + timedelta(days=i)
-            if d > today:
-                cells.append("  ")  # future – blank
-            elif d in daily:
-                count = daily[d]["sessions"]
-                cells.append(_intensity(count, max_sessions))
-                has_data_this_week = True
-            else:
-                cells.append("  ")  # no activity
-
-        # Skip this row if it has no activity and isn't the current week
-        if not has_data_this_week and cursor < today - timedelta(weeks=1):
-            cursor += timedelta(weeks=1)
-            continue
-
-        # Show date label on the left
-        lines.append(f"{_label(cursor)}  " + " ".join(cells))
+        weeks.append(cursor)
         cursor += timedelta(weeks=1)
 
-    # Legend
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    lines: list[str] = []
+
+    # Month header row — each column = cell width (● + space = 2)
+    month_labels = _month_label_weeks(weeks)
+    header = "      "  # indent for day labels
+    for ml in month_labels:
+        if ml:
+            header += f"{ml:>2}"
+        else:
+            header += "  "
+    lines.append(_wrap_markup(header))
+
+    # Day rows
+    for dow in range(7):
+        row_label = day_names[dow]
+        cells: list[str] = []
+        for week_start in weeks:
+            d = week_start + timedelta(days=dow)
+            if d > today:
+                cells.append("  ")
+            elif d in daily:
+                cells.append(_cell_markup(daily[d]["sessions"], max_sessions) + " ")
+            else:
+                cells.append("<span foreground='#21262d'>● </span>")
+        lines.append(_wrap_markup(row_label + "  ") + "".join(cells))
+
+    # Legend with colored dots
+    legend_dots = "".join(f"<span foreground='{c}'>● </span>" for c in _GREEN_LEVELS)
+    legend = f"<span>Less  </span>{legend_dots}<span>  More    (max {max_sessions}/day)</span>"
     lines.append("")
-    lines.append(
-        "██ ≥75%  ▓▓ ≥50%  ▒▒ ≥25%  ░░ <25%    (of max {}/day)".format(max_sessions)
-    )
+    lines.append(legend)
 
     return "\n".join(lines)
 
 
 def format_stats(data: dict[str, Any]) -> str:
-    """Format statistics as a human-readable string."""
+    """Format statistics as Pango-markup lines (each wrapped in <span>)."""
     lines: list[str] = []
 
-    lines.append(f"Total pomodoros:  {data['total']}")
-    lines.append(f"Current streak:   {data['current_streak']} day(s)")
-    lines.append(f"Longest streak:   {data['longest_streak']} day(s)")
-    lines.append(f"Average per day:  {data['avg_per_day']}")
-    lines.append(f"This week:         {data['total_this_week']}")
-    lines.append(f"This month:        {data['total_this_month']}")
+    def w(text: str) -> str:
+        return _wrap_markup(text)
+
+    lines.append(w(f"Total pomodoros:  {data['total']}"))
+    lines.append(w(f"Current streak:   {data['current_streak']} day(s)"))
+    lines.append(w(f"Longest streak:   {data['longest_streak']} day(s)"))
+    lines.append(w(f"Average per day:  {data['avg_per_day']}"))
+    lines.append(w(f"This week:         {data['total_this_week']}"))
+    lines.append(w(f"This month:        {data['total_this_month']}"))
 
     per_task = data.get("per_task", {})
     if per_task:
         lines.append("")
-        lines.append("── Per task ──")
-        # Determine max count for alignment padding
+        lines.append(w("── Per task ──"))
         max_count = max(per_task.values())
         pad = len(str(max_count))
         for task, count in per_task.items():
-            lines.append(f"  {count:>{pad}}  {task}")
+            lines.append(w(f"  {count:>{pad}}  {task}"))
 
     return "\n".join(lines)
 
@@ -291,14 +337,18 @@ def show_heatmap_rofi(data: dict[str, Any], history_path: Path) -> None:
     #   stats
     #   blank line
     #   OK button
-    display_text = table + "\n\n" + stats + "\n\n── OK ──"
+    ok_line = _wrap_markup("── OK ──")
+    display_text = table + "\n\n" + stats + "\n\n" + ok_line
 
     cmd = [
         "rofi",
         "-dmenu",
         "-p",
         "Heatmap",
+        "-theme",
+        str(ROFI_THEME),
         "-no-custom",
+        "-markup-rows",
     ]
 
     subprocess.run(

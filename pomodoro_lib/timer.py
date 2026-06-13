@@ -23,7 +23,7 @@ def notify(summary: str, body: str = "", urgency: str = "normal") -> None:
 
 def i3_workspace() -> None:
     subprocess.run(
-        ["i3-msg", "workspace --no-auto-back-and-forth pomodoro 🍅"],
+        ["i3-msg", "workspace --no-auto-back-and-forth 🍅"],
         capture_output=True,
     )
 
@@ -252,7 +252,7 @@ class TimerController:
 
         mins = secs // 60
         secs_rem = secs % 60
-        return f"{icon} {mins:02d}:{secs_rem:02d}"
+        return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
     # ── Internal timer ────────────────────────────────────────────────────────
     def _run_timer(self, seconds: int, callback: Callable[[], None]) -> None:
