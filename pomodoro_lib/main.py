@@ -6,16 +6,35 @@ import time
 from pathlib import Path
 
 from pomodoro_lib.config import (
-    POMO_DIR, STATE_FILE, TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE,
-    DURATION_PRESETS, CUSTOM_LABEL, DEFAULT_TASKS, BACK_LABEL, COUNT_OPTIONS,
+    BACK_LABEL,
+    COUNT_OPTIONS,
+    CUSTOM_LABEL,
+    DEFAULT_TASKS,
+    DURATION_PRESETS,
+    HISTORY_FILE,
+    INCLUDE_DURATION_FILES,
+    PAUSE_FILE,
+    POMO_DIR,
+    STATE_FILE,
+    TASKS_FILE,
+    TASKS_UNIQUE,
+)
+from pomodoro_lib.heatmap import (
+    generate_heatmap_data,
+    parse_history,
+    show_heatmap_rofi,
+)
+from pomodoro_lib.rofi import (
+    numbered_menu,
+    pick_video,
+    rofi_menu,
+    strip_number,
 )
 from pomodoro_lib.state import PomodoroState
 from pomodoro_lib.tasks import TaskManager
-from pomodoro_lib.rofi import (
-    rofi_menu, numbered_menu, strip_number,
-    pick_task, pick_video, pick_duration, pick_count,
-)
-from pomodoro_lib.timer import TimerController, notify, kill_mpv
+from pomodoro_lib.timer import TimerController, notify
+
+# ── Polybar status line ───────────────────────────────────────────────────────
 
 
 def _status_line() -> str:
@@ -23,7 +42,6 @@ def _status_line() -> str:
     if not STATE_FILE.exists():
         return ""
 
-    from pomodoro_lib.config import PAUSE_FILE
     state = PomodoroState.load(STATE_FILE)
 
     if PAUSE_FILE.exists():
@@ -42,6 +60,7 @@ def _status_line() -> str:
 
 
 # ── Handlers (called from main loop) ──────────────────────────────────────────
+
 
 def _handle_complete(tm: TaskManager) -> None:
     """Complete pomodoro — pick a task and log it."""
@@ -66,7 +85,9 @@ def _handle_manage(tm: TaskManager) -> None:
 
         # Build menu with section headers
         menu_lines: list[str] = []
-        items: list[tuple[str, Path]] = []  # (task, file_path) parallel to numbered entries
+        items: list[
+            tuple[str, Path]
+        ] = []  # (task, file_path) parallel to numbered entries
 
         idx = 0
         if everyday:
@@ -91,9 +112,9 @@ def _handle_manage(tm: TaskManager) -> None:
 
         if action.startswith("➕"):
             # Add task
-            cat_choice = rofi_menu("Add to...", [
-                "📅 Everyday", "📌 Unique", "↩ Cancel"
-            ], no_custom=True)
+            cat_choice = rofi_menu(
+                "Add to...", ["📅 Everyday", "📌 Unique", "↩ Cancel"], no_custom=True
+            )
             if cat_choice is None or cat_choice == "↩ Cancel":
                 continue
             category = "everyday" if "Everyday" in cat_choice else "unique"
@@ -114,7 +135,9 @@ def _handle_manage(tm: TaskManager) -> None:
         task, file_path = items[num - 1]
 
         # Edit / Delete / Cancel
-        choice = rofi_menu(action, ["✏️  Edit", "🗑  Delete", "↩  Cancel"], no_custom=True)
+        choice = rofi_menu(
+            action, ["✏️  Edit", "🗑  Delete", "↩  Cancel"], no_custom=True
+        )
         if choice is None or choice.startswith("↩"):
             continue
 
@@ -135,6 +158,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
 
     step = 1  # 1=task, 2=video, 3=duration, 4=count
     task = video = ""
+    video_name = ""  # scoped for duration-step check
     work_min = break_min = total = 0
 
     while True:
@@ -148,59 +172,71 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> None:
             step = 2
 
         elif step == 2:
-            video_name = pick_video(POMO_DIR)
-            if video_name is None:
+            choice = pick_video(POMO_DIR)
+            if choice is None:
                 return  # ESC → exit
-            if video_name == BACK_LABEL:
+            if choice == BACK_LABEL:
                 step = 1
                 continue
+            video_name = choice
             video = str(POMO_DIR / video_name)
             step = 3
 
         elif step == 3:
-            labels = [l for l, _, _ in DURATION_PRESETS] + [CUSTOM_LABEL, BACK_LABEL]
-            choice = rofi_menu("Pick duration", labels)
-            if choice is None:
-                return  # ESC → exit
-            if choice == BACK_LABEL:
-                step = 2
-                continue
+            # Only show duration picker for videos listed in INCLUDE_DURATION_FILES
+            if video_name and video_name in INCLUDE_DURATION_FILES:
+                labels = [label for label, _, _ in DURATION_PRESETS] + [
+                    CUSTOM_LABEL,
+                    BACK_LABEL,
+                ]
+                choice = rofi_menu("Pick duration", labels)
+                if choice is None:
+                    return  # ESC → exit
+                if choice == BACK_LABEL:
+                    step = 2
+                    continue
 
-            found = False
-            for label, w, b in DURATION_PRESETS:
-                if choice == label:
-                    work_min, break_min = w, b
-                    found = True
-                    break
-
-            if not found and choice == CUSTOM_LABEL:
-                while True:
-                    custom = rofi_menu("Work-break (e.g. 10-5)", [BACK_LABEL])
-                    if custom is None:
-                        return  # ESC
-                    if custom == BACK_LABEL:
-                        break  # back to duration picker
-                    try:
-                        parts = custom.split("-")
-                        if len(parts) != 2:
-                            raise ValueError
-                        w, b = int(parts[0]), int(parts[1])
-                        if w <= 0 or b <= 0:
-                            raise ValueError
+                found = False
+                for label, w, b in DURATION_PRESETS:
+                    if choice == label:
                         work_min, break_min = w, b
                         found = True
                         break
-                    except (ValueError, IndexError):
-                        notify("Pomodoro", "Invalid format. Use e.g. 10-5",
-                               urgency="critical")
-                if not found:
-                    continue  # back to duration picker
 
-            if found:
+                if not found and choice == CUSTOM_LABEL:
+                    while True:
+                        custom = rofi_menu("Work-break (e.g. 10-5)", [BACK_LABEL])
+                        if custom is None:
+                            return  # ESC
+                        if custom == BACK_LABEL:
+                            break  # back to duration picker
+                        try:
+                            parts = custom.split("-")
+                            if len(parts) != 2:
+                                raise ValueError
+                            w, b = int(parts[0]), int(parts[1])
+                            if w <= 0 or b <= 0:
+                                raise ValueError
+                            work_min, break_min = w, b
+                            found = True
+                            break
+                        except (ValueError, IndexError):
+                            notify(
+                                "Pomodoro",
+                                "Invalid format. Use e.g. 10-5",
+                                urgency="critical",
+                            )
+                    if not found:
+                        continue  # back to duration picker
+
+                if found:
+                    step = 4
+            else:
                 step = 4
+                continue
 
         elif step == 4:
-            count_labels = [l for l, _ in COUNT_OPTIONS] + [BACK_LABEL]
+            count_labels = [label for label, _ in COUNT_OPTIONS] + [BACK_LABEL]
             choice = rofi_menu("How many?", count_labels)
             if choice is None:
                 return  # ESC → exit
@@ -221,7 +257,6 @@ def _handle_status(ctrl: TimerController) -> None:
     if not state.is_active:
         return
 
-    from pomodoro_lib.config import PAUSE_FILE
     paused = PAUSE_FILE.exists()
 
     if paused:
@@ -231,7 +266,11 @@ def _handle_status(ctrl: TimerController) -> None:
 
     mins = secs // 60
     secs_rem = secs % 60
-    end_fmt = time.strftime("%H:%M", time.localtime(state.end_ts)) if state.end_ts else "--:--"
+    end_fmt = (
+        time.strftime("%H:%M", time.localtime(state.end_ts))
+        if state.end_ts
+        else "--:--"
+    )
 
     if state.phase == "break":
         info = f"☕  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
@@ -240,13 +279,17 @@ def _handle_status(ctrl: TimerController) -> None:
 
     toggle_label = "▶  Resume" if paused else "⏸  Pause"
 
-    action = rofi_menu("Pomodoro", [
-        info,
-        toggle_label,
-        "🔄  Change task",
-        "⏹  Stop all",
-        "🔄  Reset everything",
-    ], no_custom=True)
+    action = rofi_menu(
+        "Pomodoro",
+        [
+            info,
+            toggle_label,
+            "🔄  Change task",
+            "⏹  Stop all",
+            "🔄  Reset everything",
+        ],
+        no_custom=True,
+    )
 
     if action is None:
         return
@@ -282,7 +325,15 @@ def _handle_change_task(ctrl: TimerController) -> None:
         notify("🍅 Task changed", new_task)
 
 
+def _handle_heatmap() -> None:
+    """Show heat map and statistics in a rofi window."""
+    records = parse_history(HISTORY_FILE)
+    data = generate_heatmap_data(records)
+    show_heatmap_rofi(data, HISTORY_FILE)
+
+
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
+
 
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next."""
@@ -296,14 +347,14 @@ def _run_subcommand(args: list[str]) -> None:
     elif cmd == "stop":
         ctrl.clear_state()
     elif cmd == "next":
-        # Skip current phase — stretch goal, not yet implemented
-        pass
+        ctrl.skip_phase()
     else:
-        print(f"usage: pomodoro {{status|toggle|stop|next}}", file=sys.stderr)
+        print("usage: pomodoro {status|toggle|stop|next}", file=sys.stderr)
         sys.exit(1)
 
 
 # ── Main menu loop ────────────────────────────────────────────────────────────
+
 
 def _run_ui() -> None:
     """Launch the rofi main menu and dispatch to handlers."""
@@ -323,6 +374,7 @@ def _run_ui() -> None:
                 "▶  New session",
                 "✅  Complete pomodoro",
                 "📝  Manage tasks",
+                "🔥  Heat map",
                 "🔄  Reset everything",
             ]
         else:
@@ -330,6 +382,7 @@ def _run_ui() -> None:
                 "▶  New session",
                 "✅  Complete pomodoro",
                 "📝  Manage tasks",
+                "🔥  Heat map",
                 "🔄  Reset everything",
             ]
 
@@ -345,12 +398,15 @@ def _run_ui() -> None:
             _handle_complete(tm)
         elif action.startswith("📝"):
             _handle_manage(tm)
+        elif action.startswith("🔥"):
+            _handle_heatmap()
         elif action.startswith("🔄"):
             ctrl.clear_state()
             notify("🍅 Pomodoro", "All state cleared.")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     args = sys.argv[1:]

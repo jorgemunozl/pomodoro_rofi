@@ -1,7 +1,7 @@
 """Task management — everyday tasks, unique tasks, and history."""
 
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 class TaskManager:
@@ -14,9 +14,7 @@ class TaskManager:
     def _read_lines(self, path: Path) -> list[str]:
         if path.exists():
             return [
-                line.strip()
-                for line in path.read_text().splitlines()
-                if line.strip()
+                line.strip() for line in path.read_text().splitlines() if line.strip()
             ]
         return []
 
@@ -76,7 +74,7 @@ class TaskManager:
     # ── Init ──────────────────────────────────────────────────────────────────
     def init_defaults(self, defaults: list[str]) -> None:
         self.everyday_path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.everyday_path.exists():
+        if not self.everyday_path.exists() or not self._read_lines(self.everyday_path):
             self._write_lines(self.everyday_path, defaults)
         if not self.unique_path.exists():
             self.unique_path.touch()
