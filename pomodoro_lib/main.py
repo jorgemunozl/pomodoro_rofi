@@ -53,16 +53,26 @@ def _status_line() -> str:
         return ""
 
     state = PomodoroState.load(STATE_FILE)
+    work_total = state.work_min * 60
 
     if PAUSE_FILE.exists():
-        secs = int(PAUSE_FILE.read_text().strip())
+        raw = int(PAUSE_FILE.read_text().strip())
+        if state.phase == "work" and raw > work_total:
+            secs = raw - work_total  # remaining warm-up when paused
+        else:
+            secs = raw
         icon = "⏸"
     elif state.phase == "break":
         secs = state.remaining_seconds
         icon = "☕"
     else:
-        secs = state.remaining_seconds
-        icon = "▶"
+        raw = state.remaining_seconds
+        if raw > work_total:
+            secs = raw - work_total  # still in warm-up
+            icon = "🔥"
+        else:
+            secs = raw
+            icon = "▶"
 
     mins = secs // 60
     secs_rem = secs % 60
@@ -159,16 +169,17 @@ def _handle_manage(tm: TaskManager) -> None:
             tm.delete(task, file_path)
 
 
-def _lookup_default_rhythm(video_name: str) -> tuple[int, int, int] | None:
-    """Return (work_min, break_min, total) if video has a default rhythm, else None."""
+def _lookup_default_rhythm(video_name: str) -> tuple[int, int, int, int] | None:
+    """Return (work_min, break_min, total, warm_up_secs) if video has a default rhythm."""
     for entry in POMODORO_DEFAULTS:
         if entry[0] == video_name:
             if isinstance(entry[1], list):
                 # brain_fm style: list of (work, break, ...) tuples, take the first
                 first = entry[1][0]
                 count = first[2] if len(first) >= 3 else 1
-                return (first[0], first[1], count)
-            return (entry[1], entry[2], entry[3])
+                return (first[0], first[1], count, 0)
+            warm_up = entry[4] if len(entry) >= 5 else 0
+            return (entry[1], entry[2], entry[3], warm_up)
     return None
 
 
@@ -221,8 +232,8 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                     step = 1  # back to task selection
                     continue
                 if "Default" in rhythm_choice:
-                    work_min, break_min, total = default_rhythm
-                    ctrl.start(task, video, work_min, break_min, total)
+                    work_min, break_min, total, warm_up_secs = default_rhythm
+                    ctrl.start(task, video, work_min, break_min, total, warm_up_secs)
                     return True
                 # Personalized → fall through to step 3
 
@@ -300,13 +311,18 @@ def _handle_status(ctrl: TimerController) -> None:
 
     paused = PAUSE_FILE.exists()
 
-    if paused:
-        secs = int(PAUSE_FILE.read_text().strip())
-    else:
-        secs = state.remaining_seconds
+    work_total = state.work_min * 60
 
-    mins = secs // 60
-    secs_rem = secs % 60
+    if paused:
+        raw = int(PAUSE_FILE.read_text().strip())
+    else:
+        raw = state.remaining_seconds
+
+    in_warmup = state.phase == "work" and raw > work_total
+    display_secs = (raw - work_total) if in_warmup else raw
+
+    mins = display_secs // 60
+    secs_rem = display_secs % 60
     end_fmt = (
         time.strftime("%H:%M", time.localtime(state.end_ts))
         if state.end_ts
@@ -315,6 +331,8 @@ def _handle_status(ctrl: TimerController) -> None:
 
     if state.phase == "break":
         info = f"☕  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
+    elif in_warmup:
+        info = f"🔥  {state.task}   •   {mins}m {secs_rem}s warm-up   •   {state.current}/{state.total}"
     else:
         info = f"▶  {state.task}   •   {mins}m {secs_rem}s left   •   ends {end_fmt}   •   {state.current}/{state.total}"
 

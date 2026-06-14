@@ -26,13 +26,14 @@ INCLUDE_DURATION_FILES = ["dr.mp4", "nate.mp4", "steven.mp4"]
 # Variable pomodoro, one of 25-5, two 50-10-2, and 25-5
 brain_fm = [(25, 5), (50, 10, 2), (25, 5)]
 
-# Pomodoro minutes, break minutes, repetitions
+# Pomodoro minutes, break minutes, repetitions, warm up time seconds
 POMODORO_DEFAULTS = [
-    ("christmas_2025-I.webm", 25, 5, 4),
-    ("dawn_2025-II.mp4", 25, 5, 8),
-    ("mine_2025-II.webm", 25, 5, 4),
-    ("shinjuku2.mp4", 25, 5, 8),
-    ("study.mp4", 25, 5, 5),
+    ("christmas_2025-I.webm", 25, 5, 4, 77.5),
+    ("dawn_2025-II.mp4", 25, 5, 8, 80),
+    ("mine_2025-II.webm", 25, 5, 4, 59),
+    ("shinjuku2.mp4", 25, 5, 8, 81),
+    ("study.mp4", 25, 5, 5, 70),
+    ("golden", 25, 5, 4, 79),
     ("brain_fm.mp4", brain_fm),
 ]
 

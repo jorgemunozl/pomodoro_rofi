@@ -112,30 +112,40 @@ class TimerController:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def start(
-        self, task: str, video: str, work_min: int, break_min: int, total: int
+        self,
+        task: str,
+        video: str,
+        work_min: int,
+        break_min: int,
+        total: int,
+        warm_up_secs: int = 0,
     ) -> None:
         self.stop()
+        total_first_secs = warm_up_secs + work_min * 60
         self.state = PomodoroState(
             task=task,
-            end_ts=time.time() + work_min * 60,
+            end_ts=time.time() + total_first_secs,
             work_min=work_min,
             break_min=break_min,
             total=total,
             current=1,
             video=video,
             phase="work",
+            warm_up_secs=warm_up_secs,
         )
         self.save_state()
         start_mpv(video)
+        warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         notify(
             "🍅 Pomodoro started",
-            f"{task} — session 1/{total}\n{work_min}min — "
+            f"{task} — session 1/{total}\n"
+            f"{warmup_note}{work_min}min focus — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
         )
 
         # Defensive clear to prevent race conditions
         self._stop_event.clear()
-        self._run_timer(work_min * 60, self._on_work_end)
+        self._run_timer(total_first_secs, self._on_work_end)
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -233,16 +243,29 @@ class TimerController:
             return ""
 
         state = PomodoroState.load(STATE_FILE)
+        work_total = state.work_min * 60
 
         if PAUSE_FILE.exists():
-            secs = int(PAUSE_FILE.read_text().strip())
-            icon = "⏸"
+            raw = int(PAUSE_FILE.read_text().strip())
+            if state.phase == "work" and raw > work_total:
+                # Paused during warm-up
+                secs = raw - work_total
+                icon = "⏸"
+            else:
+                secs = raw
+                icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
             icon = "☕"
         else:
-            secs = state.remaining_seconds
-            icon = "▶"
+            raw = state.remaining_seconds
+            if raw > work_total:
+                # Still in warm-up
+                secs = raw - work_total
+                icon = "🔥"
+            else:
+                secs = raw
+                icon = "▶"
 
         mins = secs // 60
         secs_rem = secs % 60

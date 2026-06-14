@@ -1,9 +1,9 @@
 """Pomodoro state — dataclass with JSON persistence."""
 
-from dataclasses import dataclass, asdict, fields
 import json
-from pathlib import Path
 import time
+from dataclasses import asdict, dataclass, fields
+from pathlib import Path
 
 
 @dataclass
@@ -16,6 +16,7 @@ class PomodoroState:
     current: int = 1
     video: str = ""
     phase: str = "work"  # "work" | "break"
+    warm_up_secs: int = 0  # video intro seconds before actual focus begins
 
     @property
     def is_active(self) -> bool:
