@@ -1,4 +1,6 @@
 __pycache__/
 pomodoro_lib/__pycache__/
 *.pyc
+*.cpython-314.pyc
 
+data/
