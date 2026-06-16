@@ -2,7 +2,7 @@
 
 import json
 import time
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 
@@ -17,6 +17,9 @@ class PomodoroState:
     video: str = ""
     phase: str = "work"  # "work" | "break"
     warm_up_secs: int = 0  # video intro seconds before actual focus begins
+    schedule: list = field(
+        default_factory=list
+    )  # [[work, break], ...] per pomodoro, empty if uniform
 
     @property
     def is_active(self) -> bool:

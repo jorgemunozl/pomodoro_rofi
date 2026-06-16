@@ -16,7 +16,7 @@ from pomodoro_lib.state import PomodoroState
 
 def notify(summary: str, body: str = "", urgency: str = "normal") -> None:
     subprocess.run(
-        ["dunstify", "-u", urgency, "-i", "timer", summary, body],
+        ["dunstify", "-u", "critical", summary, body],
         capture_output=True,
     )
 
@@ -119,6 +119,7 @@ class TimerController:
         break_min: int,
         total: int,
         warm_up_secs: int = 0,
+        schedule: list | None = None,
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
@@ -132,6 +133,7 @@ class TimerController:
             video=video,
             phase="work",
             warm_up_secs=warm_up_secs,
+            schedule=schedule or [],
         )
         self.save_state()
         start_mpv(video)
@@ -289,6 +291,12 @@ class TimerController:
         """Work → break: update state, notify. Does NOT start a timer.
         The video keeps playing uninterrupted across work/break cycles."""
 
+        idx = self.state.current - 1  # 0-based index of the session just completed
+
+        # Look up the break_min for this session from schedule, if present
+        if self.state.schedule and idx < len(self.state.schedule):
+            self.state.break_min = self.state.schedule[idx][1]
+
         if self.state.current >= self.state.total:
             notify(
                 "🍅 All done!",
@@ -320,6 +328,13 @@ class TimerController:
     def _transition_break_to_work(self) -> None:
         """Break → work: update state, notify. Does NOT start a timer.
         The video is already playing from the initial `start()` call."""
+
+        idx = self.state.current - 1  # 0-based index of the upcoming session
+
+        # Look up work_min for this session from schedule, if present
+        if self.state.schedule and idx < len(self.state.schedule):
+            self.state.work_min = self.state.schedule[idx][0]
+
         self.state.phase = "work"
         self.state.end_ts = time.time() + self.state.work_min * 60
         self.save_state()

@@ -169,17 +169,34 @@ def _handle_manage(tm: TaskManager) -> None:
             tm.delete(task, file_path)
 
 
-def _lookup_default_rhythm(video_name: str) -> tuple[int, int, int, int] | None:
-    """Return (work_min, break_min, total, warm_up_secs) if video has a default rhythm."""
+def _lookup_default_rhythm(
+    video_name: str,
+) -> tuple[int, int, int, int, list] | None:
+    """Return (work_min, break_min, total, warm_up_secs, schedule) if video
+    has a default rhythm.
+
+    `schedule` is a list of [work, break] pairs for each pomodoro in order.
+    For regular (uniform) entries the list is empty; the caller uses the
+    scalar work_min/break_min instead.
+    """
     for entry in POMODORO_DEFAULTS:
         if entry[0] == video_name:
             if isinstance(entry[1], list):
-                # brain_fm style: list of (work, break, ...) tuples, take the first
-                first = entry[1][0]
-                count = first[2] if len(first) >= 3 else 1
-                return (first[0], first[1], count, 0)
+                # brain_fm style: list ends with warm_up int, rest are
+                # (work, break) or (work, break, repetitions) tuples
+                warm_up = entry[1][-1]  # last element is the warm-up seconds
+                schedule_tuples = entry[1][:-1]
+                schedule: list[list[int]] = []
+                for tup in schedule_tuples:
+                    work, break_ = tup[0], tup[1]
+                    reps = tup[2] if len(tup) >= 3 else 1
+                    for _ in range(reps):
+                        schedule.append([work, break_])
+                total = len(schedule)
+                first_work, first_break = schedule[0]
+                return (first_work, first_break, total, warm_up, schedule)
             warm_up = entry[4] if len(entry) >= 5 else 0
-            return (entry[1], entry[2], entry[3], warm_up)
+            return (entry[1], entry[2], entry[3], warm_up, [])
     return None
 
 
@@ -219,8 +236,9 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             video = str(POMO_DIR / video_name)
 
             # Check if this video has a default rhythm in POMODORO_DEFAULTS
-            default_rhythm = _lookup_default_rhythm(video_name)
-            if default_rhythm is not None:
+            rhythm = _lookup_default_rhythm(video_name)
+            if rhythm is not None:
+                work_min, break_min, total, warm_up_secs, schedule = rhythm
                 rhythm_choice = rofi_menu(
                     "Rhythm",
                     ["🎯  Default rhythm", "✏️  Personalized rhythm", BACK_LABEL],
@@ -232,8 +250,15 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                     step = 1  # back to task selection
                     continue
                 if "Default" in rhythm_choice:
-                    work_min, break_min, total, warm_up_secs = default_rhythm
-                    ctrl.start(task, video, work_min, break_min, total, warm_up_secs)
+                    ctrl.start(
+                        task,
+                        video,
+                        work_min,
+                        break_min,
+                        total,
+                        warm_up_secs,
+                        schedule=schedule or None,
+                    )
                     return True
                 # Personalized → fall through to step 3
 

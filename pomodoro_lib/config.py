@@ -3,9 +3,17 @@
 import os
 from pathlib import Path
 
+# ── Project root ──────────────────────────────────────────────────────────────
+
+
+def _find_project_root() -> Path:
+    """Locate the repo root (parent of pomodoro_lib/)."""
+    own = Path(__file__).resolve().parent  # pomodoro_lib/
+    return own.parent  # repo root
+
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
-XDG_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-POMO_CONFIG = XDG_CONFIG / "pomodoro"
+DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
 
 STATE_FILE = Path("/tmp/pomo_state.json")
@@ -14,26 +22,27 @@ TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
 PAUSE_FILE = Path("/tmp/pomo_pause")
 MPV_SOCKET = Path("/tmp/mpvsocket")
 
-TASKS_FILE = POMO_CONFIG / "tasks"
-TASKS_UNIQUE = POMO_CONFIG / "tasks_unique"
-HISTORY_FILE = POMO_CONFIG / "history"
+TASKS_FILE = DATA_DIR / "tasks"
+TASKS_UNIQUE = DATA_DIR / "tasks_unique"
+HISTORY_FILE = DATA_DIR / "history"
 
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
 
 
 INCLUDE_DURATION_FILES = ["dr.mp4", "nate.mp4", "steven.mp4"]
 
-# Variable pomodoro, one of 25-5, two 50-10-2, and 25-5
-brain_fm = [(25, 5), (50, 10, 2), (25, 5)]
+# Variable pomodoro, one of 25-5, two 50-10-2, and 25-5, warm up offset time
+brain_fm = [(25, 5), (50, 10, 2), (25, 5), 110]
 
 # Pomodoro minutes, break minutes, repetitions, warm up time seconds
 POMODORO_DEFAULTS = [
     ("christmas_2025-I.webm", 25, 5, 4, 77.5),
-    ("dawn_2025-II.mp4", 25, 5, 8, 80),
-    ("mine_2025-II.webm", 25, 5, 4, 59),
+    ("dawn_2025_II.mp4", 25, 5, 8, 80),
+    ("mine_2025_II.webm", 25, 5, 4, 59),
     ("shinjuku2.mp4", 25, 5, 8, 81),
     ("study.mp4", 25, 5, 5, 70),
-    ("golden", 25, 5, 4, 79),
+    ("shinjuku.mp4", 25, 5, 8, 72),
+    ("golden.webm", 25, 5, 4, 79),
     ("brain_fm.mp4", brain_fm),
 ]
 
@@ -51,17 +60,7 @@ DURATION_PRESETS = [
 CUSTOM_LABEL = "⚡ Custom time"
 
 # ── Default tasks ─────────────────────────────────────────────────────────────
-DEFAULT_TASKS = [
-    "📐 Real analysis",
-    "🤖 VLA model — training",
-    "🤖 VLA model — reading",
-    "📓 Obsidian notes",
-    "🧮 ODEs / coursework",
-    "📄 Paper / writing",
-    "⚙️  Dotfiles / config",
-    "📖 Reading",
-    "🎯 Free focus",
-]
+DEFAULT_TASKS = []
 
 # ── Pomodoro count options ────────────────────────────────────────────────────
 COUNT_OPTIONS = [
