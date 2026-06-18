@@ -453,6 +453,26 @@ def _resolve_video(name: str) -> Path | None:
     return None
 
 
+def _list_videos() -> list[Path]:
+    """List all video files in POMO_DIR."""
+    if not POMO_DIR.is_dir():
+        return []
+    return sorted(f for f in POMO_DIR.iterdir() if f.suffix in (".mp4", ".webm"))
+
+
+def _pick_random_video() -> Path | None:
+    """Pick a random video from POMO_DIR.
+
+    Returns None if no videos are found.
+    """
+    import random
+
+    videos = _list_videos()
+    if not videos:
+        return None
+    return random.choice(videos)
+
+
 def _handle_start(args: list[str]) -> None:
     """Start a session directly from CLI arguments (no Rofi UI)."""
     import argparse
@@ -471,7 +491,7 @@ def _handle_start(args: list[str]) -> None:
         "--video",
         "-v",
         required=True,
-        help="Video filename in ~/Videos/study (e.g. 'study.mp4' or 'study')",
+        help="Video filename (e.g. 'study.mp4') or 'random' to pick one randomly",
     )
     parser.add_argument(
         "--rhythm",
@@ -496,17 +516,29 @@ def _handle_start(args: list[str]) -> None:
 
     parsed = parser.parse_args(args)
 
-    # ── Resolve video path ────────────────────────────────────────────────
-    video_path = _resolve_video(parsed.video)
-    if video_path is None:
-        print(
-            f"Error: Video '{parsed.video}' not found in {POMO_DIR}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    task = parsed.task
+
+    # ── Resolve video path (or pick random) ───────────────────────────────
+    random_picked = parsed.video.lower() == "random"
+
+    if random_picked:
+        video_path = _pick_random_video()
+        if video_path is None:
+            print(
+                f"Error: No video files found in {POMO_DIR}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        video_path = _resolve_video(parsed.video)
+        if video_path is None:
+            print(
+                f"Error: Video '{parsed.video}' not found in {POMO_DIR}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     video_name = video_path.name
-    task = parsed.task
 
     # ── Determine work/break/count/warmup ─────────────────────────────────
     work_min = 25
@@ -535,6 +567,10 @@ def _handle_start(args: list[str]) -> None:
         rhythm_data = _lookup_default_rhythm(video_name)
         if rhythm_data is not None:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
+        else:
+            # No preset found — fallback to 25-5 × 4 for random, 25-5 × 1 for explicit
+            if random_picked:
+                work_min, break_min, total, warm_up_secs = 25, 5, 4, 0
         if parsed.count is not None:
             total = parsed.count
         if parsed.warmup is not None:
@@ -571,7 +607,9 @@ def _handle_start(args: list[str]) -> None:
     rhythm_label = f"{work_min}/{break_min}"
     print(
         f"\U0001f345 Started: {task} | {video_name} | {rhythm_label} | "
-        f"{total} pomodoro(s)" + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
+        f"{total} pomodoro(s)"
+        + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
+        + (" \U0001f3b2" if random_picked else "")
     )
 
     # ── Stay alive to handle transitions ──────────────────────────────────

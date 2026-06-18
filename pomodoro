@@ -12,7 +12,7 @@ Usage:
 
 Options (for start / direct flags):
     --task, -t   <name>                Task name (required)
-    --video, -v  <filename>            Video file in ~/Videos/study (required)
+    --video, -v  <filename>            Video filename or "random" to pick one randomly
     --rhythm, -r <rhythm>              "default" or "work-break" (e.g. "25-5")
     --count, -c  <n>                   Number of pomodoros (default: from rhythm or 1)
     --warmup, -w <secs>                Warm-up seconds (default: from rhythm or 0)
@@ -22,6 +22,8 @@ Examples:
     pomodoro start --task "read" --video "study.mp4"
     pomodoro -t "read" -v "study.mp4" -r "50-10" -c 4 -w 60
     pomodoro --task "write" --video "shinjuku.webm" --rhythm default
+    pomodoro --task "read" --video random          # random video + its default rhythm
+    pomodoro -t "code" -v random -r "50-10" -c 3   # random video, custom rhythm
 """
 
 import sys
