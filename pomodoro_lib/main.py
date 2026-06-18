@@ -432,11 +432,172 @@ def _handle_heatmap() -> None:
     )
 
 
+# ── CLI start subcommand ────────────────────────────────────────────────────
+
+
+def _resolve_video(name: str) -> Path | None:
+    """Resolve a video name to a full path in POMO_DIR.
+
+    If `name` already has an extension (.mp4, .webm), use it directly.
+    Otherwise try .mp4 then .webm.
+    """
+    p = Path(name)
+    if p.suffix in (".mp4", ".webm"):
+        full = POMO_DIR / p
+        return full if full.exists() else None
+    # Try with extension
+    for ext in (".mp4", ".webm"):
+        full = POMO_DIR / f"{name}{ext}"
+        if full.exists():
+            return full
+    return None
+
+
+def _handle_start(args: list[str]) -> None:
+    """Start a session directly from CLI arguments (no Rofi UI)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="pomodoro start",
+        description="Start a pomodoro session from the command line.",
+    )
+    parser.add_argument(
+        "--task",
+        "-t",
+        required=True,
+        help="Task name (e.g. 'read', 'write')",
+    )
+    parser.add_argument(
+        "--video",
+        "-v",
+        required=True,
+        help="Video filename in ~/Videos/study (e.g. 'study.mp4' or 'study')",
+    )
+    parser.add_argument(
+        "--rhythm",
+        "-r",
+        default="default",
+        help='Rhythm: "default" to use the video\'s preset, or "work-break" like "25-5"',
+    )
+    parser.add_argument(
+        "--count",
+        "-c",
+        type=int,
+        default=None,
+        help="Number of pomodoros (default: from rhythm preset or 1)",
+    )
+    parser.add_argument(
+        "--warmup",
+        "-w",
+        type=int,
+        default=None,
+        help="Warm-up seconds (default: from rhythm preset or 0)",
+    )
+
+    parsed = parser.parse_args(args)
+
+    # ── Resolve video path ────────────────────────────────────────────────
+    video_path = _resolve_video(parsed.video)
+    if video_path is None:
+        print(
+            f"Error: Video '{parsed.video}' not found in {POMO_DIR}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    video_name = video_path.name
+    task = parsed.task
+
+    # ── Determine work/break/count/warmup ─────────────────────────────────
+    work_min = 25
+    break_min = 5
+    total = 1
+    warm_up_secs = 0
+    schedule = None
+
+    if parsed.rhythm and parsed.rhythm.lower() != "default":
+        # User passed a custom rhythm like "25-5" or "50-10"
+        try:
+            parts = parsed.rhythm.split("-")
+            work_min = int(parts[0])
+            break_min = int(parts[1])
+        except (ValueError, IndexError):
+            print(
+                f"Error: Invalid rhythm '{parsed.rhythm}'. "
+                f"Use 'default' or 'work-break' (e.g. '25-5').",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        total = parsed.count or 1
+        warm_up_secs = parsed.warmup or 0
+    else:
+        # Look up default rhythm from POMODORO_DEFAULTS
+        rhythm_data = _lookup_default_rhythm(video_name)
+        if rhythm_data is not None:
+            work_min, break_min, total, warm_up_secs, schedule = rhythm_data
+        if parsed.count is not None:
+            total = parsed.count
+        if parsed.warmup is not None:
+            warm_up_secs = parsed.warmup
+
+    # ── Check for existing active session ─────────────────────────────────
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # ── Start the session ─────────────────────────────────────────────────
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    ctrl = TimerController(
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
+    )
+
+    ctrl.start(
+        task,
+        str(video_path),
+        work_min,
+        break_min,
+        total,
+        warm_up_secs,
+        schedule=schedule or None,
+    )
+
+    rhythm_label = f"{work_min}/{break_min}"
+    print(
+        f"\U0001f345 Started: {task} | {video_name} | {rhythm_label} | "
+        f"{total} pomodoro(s)" + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
+    )
+
+    # ── Stay alive to handle transitions ──────────────────────────────────
+    # The timer runs on a daemon thread, so we must keep this process alive
+    # to allow phase transitions (work -> break -> work -> done).
+    # We poll periodically, identical to what polybar's `pomodoro status` does.
+    try:
+        while STATE_FILE.exists():
+            ctrl.handle_expired()
+            # Print a compact status line (carriage-return to overwrite)
+            line = _status_line()
+            if not line:
+                break
+            print(f"\r{line}  ", end="", flush=True)
+            time.sleep(1)
+        print()  # newline after session ends
+    except KeyboardInterrupt:
+        print("\nInterrupted. Stopping session...")
+        ctrl.clear_state()
+
+
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
 
 
 def _run_subcommand(args: list[str]) -> None:
-    """Handle polybar subcommands: status, toggle, stop, next."""
+    """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
     ctrl = TimerController()
 
@@ -448,8 +609,13 @@ def _run_subcommand(args: list[str]) -> None:
         ctrl.clear_state()
     elif cmd == "next":
         ctrl.skip_phase()
+    elif cmd == "start":
+        _handle_start(args[1:])
     else:
-        print("usage: pomodoro {status|toggle|stop|next}", file=sys.stderr)
+        print(
+            "usage: pomodoro {status|toggle|stop|next|start [options]}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -512,7 +678,11 @@ def _run_ui() -> None:
 def main() -> None:
     args = sys.argv[1:]
     if args:
-        _run_subcommand(args)
+        # If the first argument starts with '-', treat it as a 'start' command
+        if args[0].startswith("-"):
+            _handle_start(args)
+        else:
+            _run_subcommand(args)
     else:
         _run_ui()
 

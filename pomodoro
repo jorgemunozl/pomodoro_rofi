@@ -2,10 +2,26 @@
 """Pomodoro timer — Rofi-powered with polybar integration.
 
 Usage:
-    pomodoro              Launch the rofi UI
-    pomodoro status       Print polybar status line
-    pomodoro toggle       Pause/resume current session
-    pomodoro stop         Stop current session
+    pomodoro                            Launch the rofi UI
+    pomodoro status                     Print polybar status line
+    pomodoro toggle                     Pause/resume current session
+    pomodoro stop                       Stop current session
+    pomodoro next                       Skip to the next phase
+    pomodoro start [options]            Start a session with CLI arguments
+    pomodoro --task <name> --video <file> [options]   (shorthand, same as start)
+
+Options (for start / direct flags):
+    --task, -t   <name>                Task name (required)
+    --video, -v  <filename>            Video file in ~/Videos/study (required)
+    --rhythm, -r <rhythm>              "default" or "work-break" (e.g. "25-5")
+    --count, -c  <n>                   Number of pomodoros (default: from rhythm or 1)
+    --warmup, -w <secs>                Warm-up seconds (default: from rhythm or 0)
+
+Examples:
+    pomodoro --task "read" --video "study.mp4"
+    pomodoro start --task "read" --video "study.mp4"
+    pomodoro -t "read" -v "study.mp4" -r "50-10" -c 4 -w 60
+    pomodoro --task "write" --video "shinjuku.webm" --rhythm default
 """
 
 import sys
