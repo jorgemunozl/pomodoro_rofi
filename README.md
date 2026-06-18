@@ -53,10 +53,16 @@ and a GitHub-style contribution heatmap.
 ### Install
 
 ```bash
-git clone https://github.com/jorgemunozl/pomodoro_rofi.git ~/project/pomodoro_rofi
+git clone https://github.com/jorgemunozl/pomodoro_rofi.git
+cd pomodoro_rofi
 
 # Make the CLI accessible
 ln -s ~/project/pomodoro_rofi/pomodoro ~/.local/bin/pomodoro
+
+# Copy the Rofi theme
+cp pomodoro.rasi ~/.config/rofi/pomodoro.rasi
+
+# Have videos on ~/Videos/study
 ```
 
 ### Rofi theme

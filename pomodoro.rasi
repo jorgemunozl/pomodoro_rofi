@@ -1,0 +1,146 @@
+/**
+ * pomodoro.rasi — Rofi theme for the pomodoro launcher
+ * Drop in: ~/.config/rofi/pomodoro.rasi
+ *
+ * Palette: tomato red + stem green on warm dark.
+ * "The kitchen timer" — rounded, tactile, one task at a time.
+ */
+
+configuration {
+    fake-transparency: true;
+}
+
+* {
+    font:           "JetBrains Mono 11";
+
+    /* surface layers — darkest → lightest */
+    bg0:            #1a1817;
+    bg1:            #231f1e;
+    bg2:            #2e2826;
+    border-c:       #3d3633;
+
+    /* text hierarchy — dim → hi */
+    text-dim:       #6b6560;
+    text-main:      #d4cec6;
+    text-hi:        #f5efe8;
+
+    /* tomato red — the timer */
+    tomato:         #d9523e;
+    tomato-dim:     #3d1c1a;
+
+    /* stem green — break / complete */
+    green:          #5c9e4b;
+    green-dim:      #1a2d16;
+
+    urgent:         #e07030;    /* timer about to ring */
+
+    background-color: transparent;
+    text-color:       @text-main;
+}
+
+/* ── window ─────────────────────────────────────────── */
+
+window {
+    background-color: transparent;
+    border:           1px;
+    border-color:     @text-main;
+    border-radius:    10px;
+    width:            520px;
+    padding:          0;
+}
+
+/* ── layout ─────────────────────────────────────────── */
+
+mainbox {
+    children: [ inputbar, listview ];
+    spacing: 0;
+    padding: 0;
+}
+
+/* ── input bar ──────────────────────────────────────── */
+
+inputbar {
+    background-color: @bg1;
+    border-radius:    10px 10px 0 0;
+    padding:          6px 12px;
+    spacing:          8px;
+    children:         [ prompt, entry ];
+}
+
+prompt {
+    background-color: @tomato-dim;
+    text-color:       @tomato;
+    border-radius:    4px;
+    padding:          2px 8px;
+    font:             "JetBrains Mono Bold 11";
+}
+
+entry {
+    text-color:        @text-hi;
+    placeholder:       "filter sessions…";
+    placeholder-color: @text-dim;
+}
+
+/* ── list ───────────────────────────────────────────── */
+
+listview {
+    background-color: @bg0;
+    border-radius:    0 0 10px 10px;
+    lines:            8;
+    fixed-height:     true;
+    spacing:          0;
+    scrollbar:        true;
+}
+
+scrollbar {
+    handle-width:   4px;
+    handle-color:   @tomato;
+    border-radius:  2px;
+    padding:        0 2px;
+}
+
+/* ── elements ───────────────────────────────────────── */
+
+element {
+    padding:          6px 12px;
+    border-radius:    0;
+    spacing:          0;
+}
+
+/* default row */
+element normal.normal {
+    background-color: transparent;
+    text-color:       @text-main;
+}
+
+/* alternate row */
+element alternate.normal {
+    background-color: @bg1;
+    text-color:       @text-main;
+}
+
+/* selected row — tomato-red left bar */
+element selected.normal {
+    background-color: @bg2;
+    text-color:       @text-hi;
+    border-left:      3px;
+    border-color:     @tomato;
+    padding-left:     9px;
+}
+
+element selected.alternate {
+    background-color: @bg2;
+    text-color:       @text-hi;
+    border-left:      3px;
+    border-color:     @tomato;
+    padding-left:     9px;
+}
+
+element-text {
+    vertical-align: 0.5;
+}
+
+/* urgent — warm orange, like a timer running hot */
+element urgent.normal {
+    text-color: @urgent;
+}
