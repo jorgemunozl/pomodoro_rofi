@@ -39,25 +39,44 @@ def mpv_cmd(json_cmd: str) -> None:
         )
 
 
-def start_mpv(video: str) -> None:
-    """Launch mpv with the given video file."""
-    i3_workspace()
-    if video and Path(video).exists():
+def start_mpv(video: str, audio_only: bool = False) -> None:
+    """Launch mpv with the given video file (or its mp3 if audio_only)."""
+    if audio_only:
+        audio_path = Path(video).with_suffix(".mp3")
+        if not audio_path.exists():
+            return
         proc = subprocess.Popen(
             [
                 "mpv",
                 "--loop",
                 "--no-terminal",
-                "--fullscreen",
-                "--panscan=1.0",
-                "--no-video-osd",
+                "--no-video",
                 "--input-ipc-server=" + str(MPV_SOCKET),
-                video,
+                str(audio_path),
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        PID_FILE.write_text(str(proc.pid))
+    else:
+        i3_workspace()
+        if video and Path(video).exists():
+            proc = subprocess.Popen(
+                [
+                    "mpv",
+                    "--loop",
+                    "--no-terminal",
+                    "--fullscreen",
+                    "--panscan=1.0",
+                    "--no-video-osd",
+                    "--input-ipc-server=" + str(MPV_SOCKET),
+                    video,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            return
+    PID_FILE.write_text(str(proc.pid))
 
 
 def kill_mpv() -> None:
@@ -120,6 +139,7 @@ class TimerController:
         total: int,
         warm_up_secs: int = 0,
         schedule: list | None = None,
+        audio_only: bool = False,
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
@@ -134,9 +154,10 @@ class TimerController:
             phase="work",
             warm_up_secs=warm_up_secs,
             schedule=schedule or [],
+            audio_only=audio_only,
         )
         self.save_state()
-        start_mpv(video)
+        start_mpv(video, audio_only)
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         notify(
             "🍅 Pomodoro started",

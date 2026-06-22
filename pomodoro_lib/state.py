@@ -17,6 +17,7 @@ class PomodoroState:
     video: str = ""
     phase: str = "work"  # "work" | "break"
     warm_up_secs: int = 0  # video intro seconds before actual focus begins
+    audio_only: bool = False  # play mp3 instead of video
     schedule: list = field(
         default_factory=list
     )  # [[work, break], ...] per pomodoro, empty if uniform

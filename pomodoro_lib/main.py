@@ -210,10 +210,11 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
         notify("Pomodoro", "No tasks available. Add tasks first.")
         return False
 
-    step = 1  # 1=task, 2=video, 3=duration, 4=count
+    step = 1  # 1=task, 2=video, 3=audio, 4=duration, 5=count
     task = video = ""
     video_name = ""
     work_min = break_min = total = 0
+    audio_only = False
 
     while True:
         if step == 1:
@@ -234,6 +235,22 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 continue
             video_name = choice
             video = str(POMO_DIR / video_name)
+            step = 3
+
+        elif step == 3:
+            mode_choice = rofi_menu(
+                "Mode",
+                ["🖥  Play video (fullscreen)", "🎵  Audio only", BACK_LABEL],
+                no_custom=True,
+            )
+            if mode_choice is None:
+                return False  # ESC → exit
+            if mode_choice == BACK_LABEL:
+                step = 2
+                continue
+            audio_only = "Audio only" in mode_choice
+            if audio_only:
+                _ensure_mp3(Path(video))
 
             # Check if this video has a default rhythm in POMODORO_DEFAULTS
             rhythm = _lookup_default_rhythm(video_name)
@@ -247,7 +264,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 if rhythm_choice is None:
                     return False  # ESC → exit
                 if rhythm_choice == BACK_LABEL:
-                    step = 1  # back to task selection
+                    step = 2  # back to video selection
                     continue
                 if "Default" in rhythm_choice:
                     ctrl.start(
@@ -258,14 +275,15 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         total,
                         warm_up_secs,
                         schedule=schedule or None,
+                        audio_only=audio_only,
                     )
                     return True
-                # Personalized → fall through to step 3
+                # Personalized → fall through to step 4
 
             # For personalized rhythm or non-default videos, show duration picker
-            step = 3
+            step = 4
 
-        elif step == 3:
+        elif step == 4:
             labels = [label for label, _, _ in DURATION_PRESETS] + [
                 CUSTOM_LABEL,
                 BACK_LABEL,
@@ -274,7 +292,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
-                step = 2
+                step = 3
                 continue
 
             found = False
@@ -311,20 +329,27 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                     continue  # back to duration picker
 
             if found:
-                step = 4
+                step = 5
 
-        elif step == 4:
+        elif step == 5:
             count_labels = [label for label, _ in COUNT_OPTIONS] + [BACK_LABEL]
             choice = rofi_menu("How many?", count_labels)
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
-                step = 3
+                step = 4
                 continue
             for label, c in COUNT_OPTIONS:
                 if choice == label:
                     total = c
-                    ctrl.start(task, video, work_min, break_min, total)
+                    ctrl.start(
+                        task,
+                        video,
+                        work_min,
+                        break_min,
+                        total,
+                        audio_only=audio_only,
+                    )
                     return True
 
 
@@ -473,6 +498,53 @@ def _pick_random_video() -> Path | None:
     return random.choice(videos)
 
 
+def _ensure_mp3(video_path: Path) -> Path:
+    """Generate an mp3 from a video file if it doesn't exist yet.
+
+    Returns the path to the mp3 file.
+    """
+    mp3_path = video_path.with_suffix(".mp3")
+    if mp3_path.exists():
+        return mp3_path
+
+    print(
+        f"\U0001f3b5 Generating {mp3_path.name} from {video_path.name}...", flush=True
+    )
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-i",
+                str(video_path),
+                "-vn",
+                "-acodec",
+                "libmp3lame",
+                "-q:a",
+                "2",
+                "-y",
+                str(mp3_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(
+                f"Error generating mp3: {result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    except FileNotFoundError:
+        print(
+            "Error: ffmpeg not found. Install it to use audio-only mode.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return mp3_path
+
+
 def _handle_start(args: list[str]) -> None:
     """Start a session directly from CLI arguments (no Rofi UI)."""
     import argparse
@@ -513,6 +585,12 @@ def _handle_start(args: list[str]) -> None:
         default=None,
         help="Warm-up seconds (default: from rhythm preset or 0)",
     )
+    parser.add_argument(
+        "--audio",
+        "-a",
+        action="store_true",
+        help="Play audio only (no video window, generates mp3 from video)",
+    )
 
     parsed = parser.parse_args(args)
 
@@ -539,6 +617,10 @@ def _handle_start(args: list[str]) -> None:
             sys.exit(1)
 
     video_name = video_path.name
+
+    # ---- Generate mp3 for audio-only mode ----
+    if parsed.audio:
+        _ensure_mp3(video_path)
 
     # ── Determine work/break/count/warmup ─────────────────────────────────
     work_min = 25
@@ -602,6 +684,7 @@ def _handle_start(args: list[str]) -> None:
         total,
         warm_up_secs,
         schedule=schedule or None,
+        audio_only=parsed.audio,
     )
 
     rhythm_label = f"{work_min}/{break_min}"
@@ -610,6 +693,7 @@ def _handle_start(args: list[str]) -> None:
         f"{total} pomodoro(s)"
         + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
         + (" \U0001f3b2" if random_picked else "")
+        + (" \U0001f3b5" if parsed.audio else "")
     )
 
     # ── Stay alive to handle transitions ──────────────────────────────────

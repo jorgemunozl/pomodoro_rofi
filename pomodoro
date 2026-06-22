@@ -16,6 +16,7 @@ Options (for start / direct flags):
     --rhythm, -r <rhythm>              "default" or "work-break" (e.g. "25-5")
     --count, -c  <n>                   Number of pomodoros (default: from rhythm or 1)
     --warmup, -w <secs>                Warm-up seconds (default: from rhythm or 0)
+    --audio, -a                        Play audio only (no video, uses mp3)
 
 Examples:
     pomodoro --task "read" --video "study.mp4"
@@ -24,6 +25,8 @@ Examples:
     pomodoro --task "write" --video "shinjuku.webm" --rhythm default
     pomodoro --task "read" --video random          # random video + its default rhythm
     pomodoro -t "code" -v random -r "50-10" -c 3   # random video, custom rhythm
+    pomodoro --task "read" --video random --audio   # random video, audio only
+    pomodoro -t "write" -v "study.mp4" -a          # study.mp4, audio only
 """
 
 import sys
