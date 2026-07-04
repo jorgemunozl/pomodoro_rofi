@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from pomodoro_lib.config import (
+    ARC_SOUNDTRACK,
     BACK_LABEL,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
@@ -215,6 +216,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
     video_name = ""
     work_min = break_min = total = 0
     audio_only = False
+    arc_mode = False
 
     while True:
         if step == 1:
@@ -227,14 +229,25 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             step = 2
 
         elif step == 2:
-            choice = pick_video(POMO_DIR)
+            arc_thumb = _ensure_arc_thumb()
+            choice = pick_video(POMO_DIR, arc_thumb=arc_thumb)
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
                 step = 1
                 continue
+
+            if choice == "CURRENT_ARC":
+                # ARC mode — audio-only, no video file
+                arc_mode = True
+                video = str(ARC_SOUNDTRACK)
+                video_name = "CURRENT_ARC"
+                step = 4  # skip mode selection, go straight to duration
+                continue
+
             video_name = choice
             video = str(POMO_DIR / video_name)
+            arc_mode = False
             step = 3
 
         elif step == 3:
@@ -276,6 +289,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         warm_up_secs,
                         schedule=schedule or None,
                         audio_only=audio_only,
+                        arc_mode=arc_mode,
                     )
                     return True
                 # Personalized → fall through to step 4
@@ -349,6 +363,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         break_min,
                         total,
                         audio_only=audio_only,
+                        arc_mode=arc_mode,
                     )
                     return True
 
@@ -463,9 +478,12 @@ def _handle_heatmap() -> None:
 def _resolve_video(name: str) -> Path | None:
     """Resolve a video name to a full path in POMO_DIR.
 
+    Returns None for 'arc' / 'CURRENT_ARC' (handled by caller).
     If `name` already has an extension (.mp4, .webm), use it directly.
     Otherwise try .mp4 then .webm.
     """
+    if name.lower() in ("arc", "current_arc"):
+        return None  # sentinel: caller should use arc mode
     p = Path(name)
     if p.suffix in (".mp4", ".webm"):
         full = POMO_DIR / p
@@ -545,6 +563,716 @@ def _ensure_mp3(video_path: Path) -> Path:
     return mp3_path
 
 
+def _ensure_arc_thumb() -> str:
+    """Generate a thumbnail image for the CURRENT_ARC entry.
+
+    Creates a simple 250x250 image with a musical note background
+    at ~/Videos/current_arc/thumbnail.jpg if it doesn't exist.
+    Returns the path to the thumbnail.
+    """
+    thumb = ARC_SOUNDTRACK / "current_arc.jpg"
+    if thumb.exists():
+        return str(thumb)
+
+    # Generate with ffmpeg — draw a dark background with text
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                (
+                    "color=c=0x1e1e2e:s=250x250"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    ":text='CURRENT ARC'"
+                    ":fontcolor=0xcdd6f4:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2-10"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans.ttf"
+                    ":text='🎶':fontcolor=0xf9e2af:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2+20"
+                ),
+                "-frames:v",
+                "1",
+                str(thumb),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and thumb.exists():
+            return str(thumb)
+    except Exception:
+        pass
+
+    # Fallback: create a minimal valid JPEG (1x1 red pixel)
+    # Using Pillow if available, otherwise a raw minimal JPEG
+    try:
+        from PIL import Image
+
+        img = Image.new("RGB", (1, 1), color=(30, 30, 46))
+        img.save(thumb, "JPEG")
+        return str(thumb)
+    except ImportError:
+        pass
+
+    # Last resort: 1x1 blue JPEG as raw bytes
+    minimal_jpg = bytes(
+        [
+            0xFF,
+            0xD8,
+            0xFF,
+            0xE0,
+            0x00,
+            0x10,
+            0x4A,
+            0x46,
+            0x49,
+            0x46,
+            0x00,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0xFF,
+            0xDB,
+            0x00,
+            0x43,
+            0x00,
+            0x08,
+            0x06,
+            0x06,
+            0x07,
+            0x06,
+            0x05,
+            0x08,
+            0x07,
+            0x07,
+            0x07,
+            0x09,
+            0x09,
+            0x08,
+            0x0A,
+            0x0C,
+            0x14,
+            0x0D,
+            0x0C,
+            0x0B,
+            0x0B,
+            0x0C,
+            0x19,
+            0x12,
+            0x13,
+            0x0F,
+            0x14,
+            0x1D,
+            0x1A,
+            0x1F,
+            0x1E,
+            0x1D,
+            0x1A,
+            0x1C,
+            0x1C,
+            0x20,
+            0x24,
+            0x2E,
+            0x27,
+            0x20,
+            0x22,
+            0x2C,
+            0x23,
+            0x1C,
+            0x1C,
+            0x28,
+            0x37,
+            0x29,
+            0x2C,
+            0x30,
+            0x31,
+            0x34,
+            0x34,
+            0x34,
+            0x1F,
+            0x27,
+            0x39,
+            0x3D,
+            0x38,
+            0x32,
+            0x3C,
+            0x2E,
+            0x33,
+            0x34,
+            0x32,
+            0xFF,
+            0xDB,
+            0x00,
+            0x43,
+            0x01,
+            0x09,
+            0x09,
+            0x09,
+            0x0C,
+            0x0B,
+            0x0C,
+            0x18,
+            0x0D,
+            0x0D,
+            0x18,
+            0x32,
+            0x21,
+            0x1C,
+            0x21,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0x32,
+            0xFF,
+            0xC0,
+            0x00,
+            0x11,
+            0x08,
+            0x00,
+            0x01,
+            0x00,
+            0x01,
+            0x03,
+            0x01,
+            0x22,
+            0x00,
+            0x02,
+            0x11,
+            0x01,
+            0x03,
+            0x11,
+            0x01,
+            0xFF,
+            0xC4,
+            0x00,
+            0x1F,
+            0x00,
+            0x00,
+            0x01,
+            0x05,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x07,
+            0x08,
+            0x09,
+            0x0A,
+            0x0B,
+            0xFF,
+            0xC4,
+            0x00,
+            0xB5,
+            0x10,
+            0x00,
+            0x02,
+            0x01,
+            0x03,
+            0x03,
+            0x02,
+            0x04,
+            0x03,
+            0x05,
+            0x05,
+            0x04,
+            0x04,
+            0x00,
+            0x00,
+            0x01,
+            0x7D,
+            0x01,
+            0x02,
+            0x03,
+            0x00,
+            0x04,
+            0x11,
+            0x05,
+            0x12,
+            0x21,
+            0x31,
+            0x41,
+            0x06,
+            0x13,
+            0x51,
+            0x61,
+            0x07,
+            0x22,
+            0x71,
+            0x14,
+            0x32,
+            0x81,
+            0x91,
+            0xA1,
+            0x08,
+            0x23,
+            0x42,
+            0xB1,
+            0xC1,
+            0x15,
+            0x52,
+            0xD1,
+            0xF0,
+            0x24,
+            0x33,
+            0x62,
+            0x72,
+            0x82,
+            0x09,
+            0x0A,
+            0x16,
+            0x17,
+            0x18,
+            0x19,
+            0x1A,
+            0x25,
+            0x26,
+            0x27,
+            0x28,
+            0x29,
+            0x2A,
+            0x34,
+            0x35,
+            0x36,
+            0x37,
+            0x38,
+            0x39,
+            0x3A,
+            0x43,
+            0x44,
+            0x45,
+            0x46,
+            0x47,
+            0x48,
+            0x49,
+            0x4A,
+            0x53,
+            0x54,
+            0x55,
+            0x56,
+            0x57,
+            0x58,
+            0x59,
+            0x5A,
+            0x63,
+            0x64,
+            0x65,
+            0x66,
+            0x67,
+            0x68,
+            0x69,
+            0x6A,
+            0x73,
+            0x74,
+            0x75,
+            0x76,
+            0x77,
+            0x78,
+            0x79,
+            0x7A,
+            0x83,
+            0x84,
+            0x85,
+            0x86,
+            0x87,
+            0x88,
+            0x89,
+            0x8A,
+            0x92,
+            0x93,
+            0x94,
+            0x95,
+            0x96,
+            0x97,
+            0x98,
+            0x99,
+            0x9A,
+            0xA2,
+            0xA3,
+            0xA4,
+            0xA5,
+            0xA6,
+            0xA7,
+            0xA8,
+            0xA9,
+            0xAA,
+            0xB2,
+            0xB3,
+            0xB4,
+            0xB5,
+            0xB6,
+            0xB7,
+            0xB8,
+            0xB9,
+            0xBA,
+            0xC2,
+            0xC3,
+            0xC4,
+            0xC5,
+            0xC6,
+            0xC7,
+            0xC8,
+            0xC9,
+            0xCA,
+            0xD2,
+            0xD3,
+            0xD4,
+            0xD5,
+            0xD6,
+            0xD7,
+            0xD8,
+            0xD9,
+            0xDA,
+            0xE1,
+            0xE2,
+            0xE3,
+            0xE4,
+            0xE5,
+            0xE6,
+            0xE7,
+            0xE8,
+            0xE9,
+            0xEA,
+            0xF1,
+            0xF2,
+            0xF3,
+            0xF4,
+            0xF5,
+            0xF6,
+            0xF7,
+            0xF8,
+            0xF9,
+            0xFA,
+            0xFF,
+            0xC4,
+            0x00,
+            0x1F,
+            0x01,
+            0x00,
+            0x03,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x07,
+            0x08,
+            0x09,
+            0x0A,
+            0x0B,
+            0xFF,
+            0xC4,
+            0x00,
+            0xB5,
+            0x11,
+            0x00,
+            0x02,
+            0x01,
+            0x02,
+            0x04,
+            0x04,
+            0x03,
+            0x04,
+            0x07,
+            0x05,
+            0x04,
+            0x04,
+            0x00,
+            0x01,
+            0x02,
+            0x77,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x11,
+            0x04,
+            0x05,
+            0x21,
+            0x31,
+            0x06,
+            0x12,
+            0x41,
+            0x51,
+            0x07,
+            0x61,
+            0x71,
+            0x13,
+            0x22,
+            0x32,
+            0x81,
+            0x08,
+            0x14,
+            0x42,
+            0x91,
+            0xA1,
+            0xB1,
+            0xC1,
+            0x09,
+            0x23,
+            0x33,
+            0x52,
+            0xF0,
+            0x15,
+            0x62,
+            0x72,
+            0xD1,
+            0x0A,
+            0x16,
+            0x24,
+            0x34,
+            0xE1,
+            0x25,
+            0xF1,
+            0x17,
+            0x18,
+            0x19,
+            0x1A,
+            0x26,
+            0x27,
+            0x28,
+            0x29,
+            0x2A,
+            0x35,
+            0x36,
+            0x37,
+            0x38,
+            0x39,
+            0x3A,
+            0x43,
+            0x44,
+            0x45,
+            0x46,
+            0x47,
+            0x48,
+            0x49,
+            0x4A,
+            0x53,
+            0x54,
+            0x55,
+            0x56,
+            0x57,
+            0x58,
+            0x59,
+            0x5A,
+            0x63,
+            0x64,
+            0x65,
+            0x66,
+            0x67,
+            0x68,
+            0x69,
+            0x6A,
+            0x73,
+            0x74,
+            0x75,
+            0x76,
+            0x77,
+            0x78,
+            0x79,
+            0x7A,
+            0x82,
+            0x83,
+            0x84,
+            0x85,
+            0x86,
+            0x87,
+            0x88,
+            0x89,
+            0x8A,
+            0x92,
+            0x93,
+            0x94,
+            0x95,
+            0x96,
+            0x97,
+            0x98,
+            0x99,
+            0x9A,
+            0xA2,
+            0xA3,
+            0xA4,
+            0xA5,
+            0xA6,
+            0xA7,
+            0xA8,
+            0xA9,
+            0xAA,
+            0xB2,
+            0xB3,
+            0xB4,
+            0xB5,
+            0xB6,
+            0xB7,
+            0xB8,
+            0xB9,
+            0xBA,
+            0xC2,
+            0xC3,
+            0xC4,
+            0xC5,
+            0xC6,
+            0xC7,
+            0xC8,
+            0xC9,
+            0xCA,
+            0xD2,
+            0xD3,
+            0xD4,
+            0xD5,
+            0xD6,
+            0xD7,
+            0xD8,
+            0xD9,
+            0xDA,
+            0xE2,
+            0xE3,
+            0xE4,
+            0xE5,
+            0xE6,
+            0xE7,
+            0xE8,
+            0xE9,
+            0xEA,
+            0xF2,
+            0xF3,
+            0xF4,
+            0xF5,
+            0xF6,
+            0xF7,
+            0xF8,
+            0xF9,
+            0xFA,
+            0xFF,
+            0xDA,
+            0x00,
+            0x0C,
+            0x03,
+            0x01,
+            0x00,
+            0x02,
+            0x11,
+            0x03,
+            0x11,
+            0x00,
+            0x3F,
+            0x00,
+            0xF2,
+            0x40,
+            0x00,
+            0x04,
+            0x0E,
+            0x31,
+            0xC0,
+            0x00,
+            0x7D,
+            0x28,
+            0xA2,
+            0x8F,
+            0xF5,
+            0x7F,
+            0x8D,
+            0x7F,
+            0xFF,
+            0xD9,
+        ]
+    )
+    try:
+        with open(thumb, "wb") as f:
+            f.write(minimal_jpg)
+        return str(thumb)
+    except Exception:
+        return ""
+
+
 def _handle_start(args: list[str]) -> None:
     """Start a session directly from CLI arguments (no Rofi UI)."""
     import argparse
@@ -563,7 +1291,7 @@ def _handle_start(args: list[str]) -> None:
         "--video",
         "-v",
         required=True,
-        help="Video filename (e.g. 'study.mp4') or 'random' to pick one randomly",
+        help="Video filename (e.g. 'study.mp4'), 'random', or 'arc' for CURRENT_ARC soundtrack",
     )
     parser.add_argument(
         "--rhythm",
@@ -595,11 +1323,16 @@ def _handle_start(args: list[str]) -> None:
     parsed = parser.parse_args(args)
 
     task = parsed.task
-
-    # ── Resolve video path (or pick random) ───────────────────────────────
+    arc_mode = parsed.video.lower() in ("arc", "current_arc")
     random_picked = parsed.video.lower() == "random"
 
-    if random_picked:
+    # ── Resolve video path (or pick random / arc) ──────────────────────────
+    if arc_mode:
+        # Current arc soundtrack — no video file needed
+        video_name = "CURRENT_ARC"
+        video_path = ARC_SOUNDTRACK  # used as identifier in state
+        parsed.audio = True  # arc is always audio-only
+    elif random_picked:
         video_path = _pick_random_video()
         if video_path is None:
             print(
@@ -619,7 +1352,7 @@ def _handle_start(args: list[str]) -> None:
     video_name = video_path.name
 
     # ---- Generate mp3 for audio-only mode ----
-    if parsed.audio:
+    if parsed.audio and not arc_mode:
         _ensure_mp3(video_path)
 
     # ── Determine work/break/count/warmup ─────────────────────────────────
@@ -650,8 +1383,8 @@ def _handle_start(args: list[str]) -> None:
         if rhythm_data is not None:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
         else:
-            # No preset found — fallback to 25-5 × 4 for random, 25-5 × 1 for explicit
-            if random_picked:
+            # No preset found — fallback to 25-5 × 4 for random/arc, 25-5 × 1 for explicit
+            if random_picked or arc_mode:
                 work_min, break_min, total, warm_up_secs = 25, 5, 4, 0
         if parsed.count is not None:
             total = parsed.count
@@ -685,6 +1418,7 @@ def _handle_start(args: list[str]) -> None:
         warm_up_secs,
         schedule=schedule or None,
         audio_only=parsed.audio,
+        arc_mode=arc_mode,
     )
 
     rhythm_label = f"{work_min}/{break_min}"
@@ -694,6 +1428,7 @@ def _handle_start(args: list[str]) -> None:
         + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
         + (" \U0001f3b2" if random_picked else "")
         + (" \U0001f3b5" if parsed.audio else "")
+        + (" \U0001f3b6 ARC" if arc_mode else "")
     )
 
     # ── Stay alive to handle transitions ──────────────────────────────────

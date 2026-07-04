@@ -16,6 +16,9 @@ def _find_project_root() -> Path:
 DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
 
+ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
+ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
+
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
 TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")

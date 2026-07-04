@@ -3,13 +3,23 @@
 import subprocess
 from pathlib import Path
 
-from pomodoro_lib.config import ROFI_THEME, BACK_LABEL, DURATION_PRESETS, CUSTOM_LABEL, COUNT_OPTIONS
+from pomodoro_lib.config import (
+    BACK_LABEL,
+    COUNT_OPTIONS,
+    CUSTOM_LABEL,
+    DURATION_PRESETS,
+    ROFI_THEME,
+)
 
 
-def _rofi(prompt: str, options: list[str], *,
-          extra_flags: list[str] | None = None,
-          no_custom: bool = False,
-          raw_input: str | None = None) -> str | None:
+def _rofi(
+    prompt: str,
+    options: list[str],
+    *,
+    extra_flags: list[str] | None = None,
+    no_custom: bool = False,
+    raw_input: str | None = None,
+) -> str | None:
     """Core rofi call. Returns selected string or None on cancel."""
     cmd = ["rofi", "-dmenu", "-p", prompt, "-theme", str(ROFI_THEME)]
     if no_custom:
@@ -23,12 +33,16 @@ def _rofi(prompt: str, options: list[str], *,
     return out if out else None
 
 
-def rofi_menu(prompt: str, options: list[str], *, no_custom: bool = False) -> str | None:
+def rofi_menu(
+    prompt: str, options: list[str], *, no_custom: bool = False
+) -> str | None:
     """Show a simple text menu. Returns selected string or None."""
     return _rofi(prompt, options, no_custom=no_custom)
 
 
-def numbered_menu(prompt: str, items: list[str], *, add_back: bool = True) -> str | None:
+def numbered_menu(
+    prompt: str, items: list[str], *, add_back: bool = True
+) -> str | None:
     """Show numbered list (1. item, 2. item, ...). Returns raw selection or None."""
     lines = [f"{i + 1}. {item}" for i, item in enumerate(items)]
     if add_back:
@@ -39,33 +53,92 @@ def numbered_menu(prompt: str, items: list[str], *, add_back: bool = True) -> st
 def strip_number(selection: str) -> str:
     """Remove leading 'N. ' from a numbered-menu selection."""
     import re
+
     return re.sub(r"^\d+\.\s*", "", selection)
 
 
-def pick_task(items: list[str], prompt: str = "Pick task",
-              add_back: bool = True) -> str | None:
+def pick_task(
+    items: list[str], prompt: str = "Pick task", add_back: bool = True
+) -> str | None:
     """Pick a task from a numbered list."""
     return numbered_menu(prompt, items, add_back=add_back)
 
 
-def pick_video(videos_dir: Path) -> str | None:
-    """Show video grid with thumbnail icons. Returns filename or None."""
-    videos = sorted(
-        f for f in videos_dir.iterdir()
-        if f.suffix in (".mp4", ".webm")
-    )
-    if not videos:
+def _ensure_back_thumb() -> str:
+    """Generate a back-arrow thumbnail for the video picker's Back entry.
+
+    Returns the path to the thumbnail (cached at /tmp/pomo_back_thumb.jpg).
+    """
+    thumb = Path("/tmp/pomo_back_thumb.jpg")
+    if thumb.exists():
+        return str(thumb)
+
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                (
+                    "color=c=0x313244:s=250x250"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    ":text='↩':fontcolor=0xcdd6f4:fontsize=72"
+                    ":x=(w-text_w)/2:y=(h-text_h)/2-10"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans.ttf"
+                    ":text='Back':fontcolor=0xa6adc8:fontsize=22"
+                    ":x=(w-text_w)/2:y=(h-text_h)/2+35"
+                ),
+                "-frames:v",
+                "1",
+                str(thumb),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and thumb.exists():
+            return str(thumb)
+    except Exception:
+        pass
+
+    # Fallback: 1x1 dark pixel
+    from PIL import Image
+
+    img = Image.new("RGB", (1, 1), color=(49, 50, 68))
+    img.save(thumb, "JPEG")
+    return str(thumb)
+
+
+def pick_video(videos_dir: Path, *, arc_thumb: str | None = None) -> str | None:
+    """Show video grid with thumbnail icons.
+
+    If *arc_thumb* is provided, prepends a "CURRENT_ARC" entry
+    with that thumbnail to the video list.
+
+    Returns the selected filename, "CURRENT_ARC", or None.
+    """
+    videos = sorted(f for f in videos_dir.iterdir() if f.suffix in (".mp4", ".webm"))
+    if not videos and not arc_thumb:
         return None
 
     # Build raw input with \0icon\x1f for thumbnails
     parts = []
+
+    # CURRENT_ARC entry first, if provided
+    if arc_thumb:
+        parts.append(f"CURRENT_ARC\0icon\x1f{arc_thumb}")
+
     for v in videos:
         thumb = videos_dir / f"{v.stem}.jpg"
         if thumb.exists():
             parts.append(f"{v.name}\0icon\x1f{thumb}")
         else:
             parts.append(v.name)
-    parts.append(BACK_LABEL)
+    parts.append(f"{BACK_LABEL}\0icon\x1f{_ensure_back_thumb()}")
     raw_input = "\n".join(parts)
 
     theme_str = (

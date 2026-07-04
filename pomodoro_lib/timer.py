@@ -8,8 +8,77 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from pomodoro_lib.config import MPV_SOCKET, PAUSE_FILE, PID_FILE, STATE_FILE
+from pomodoro_lib.config import (
+    ARC_SILENCE_SECONDS,
+    ARC_SOUNDTRACK,
+    MPV_SOCKET,
+    PAUSE_FILE,
+    PID_FILE,
+    STATE_FILE,
+)
 from pomodoro_lib.state import PomodoroState
+
+
+def ensure_silence_mp3(silence_secs: int = ARC_SILENCE_SECONDS) -> Path:
+    """Generate or return cached silence mp3."""
+    path = Path(f"/tmp/{silence_secs}s-silence.mp3")
+    if not path.exists():
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                f"anullsrc=r=44100:cl=stereo",
+                "-t",
+                str(silence_secs),
+                "-q:a",
+                "14",
+                "-acodec",
+                "libmp3lame",
+                str(path),
+            ],
+            capture_output=True,
+        )
+    return path
+
+
+def build_arc_playlist(silence_secs: int = ARC_SILENCE_SECONDS) -> Path | None:
+    """Build a shuffled playlist of arc tracks interleaved with silence.
+
+    Returns a temporary playlist file path, or None if no tracks found.
+    """
+    import random
+    import tempfile
+
+    if not ARC_SOUNDTRACK.is_dir():
+        return None
+
+    tracks = sorted(
+        f
+        for f in ARC_SOUNDTRACK.iterdir()
+        if f.suffix.lower()
+        in (".mp3", ".m4a", ".ogg", ".flac", ".wav", ".opus", ".aac")
+    )
+    if not tracks:
+        return None
+
+    random.shuffle(tracks)
+    silence = ensure_silence_mp3(silence_secs)
+
+    pl = tempfile.NamedTemporaryFile(mode="w", suffix=".m3u", delete=False)
+    # M3U format: one path per line
+    for track in tracks:
+        pl.write(f"{silence}\n")
+        pl.write(f"{track}\n")
+    pl.close()
+
+    return Path(pl.name)
+
 
 # ── External tool helpers ─────────────────────────────────────────────────────
 
@@ -39,9 +108,24 @@ def mpv_cmd(json_cmd: str) -> None:
         )
 
 
-def start_mpv(video: str, audio_only: bool = False) -> None:
-    """Launch mpv with the given video file (or its mp3 if audio_only)."""
-    if audio_only:
+def start_mpv(video: str, audio_only: bool = False, arc_mode: bool = False) -> None:
+    """Launch mpv with the given video file (or playlist for arc_mode)."""
+    if arc_mode:
+        pl = build_arc_playlist()
+        if pl is None:
+            return
+        proc = subprocess.Popen(
+            [
+                "mpv",
+                "--no-terminal",
+                "--no-video",
+                "--input-ipc-server=" + str(MPV_SOCKET),
+                "--playlist=" + str(pl),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    elif audio_only:
         audio_path = Path(video).with_suffix(".mp3")
         if not audio_path.exists():
             return
@@ -51,6 +135,7 @@ def start_mpv(video: str, audio_only: bool = False) -> None:
                 "--loop",
                 "--no-terminal",
                 "--no-video",
+                "x11-name=no_reg",
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 str(audio_path),
             ],
@@ -140,6 +225,7 @@ class TimerController:
         warm_up_secs: int = 0,
         schedule: list | None = None,
         audio_only: bool = False,
+        arc_mode: bool = False,
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
@@ -155,9 +241,10 @@ class TimerController:
             warm_up_secs=warm_up_secs,
             schedule=schedule or [],
             audio_only=audio_only,
+            arc_mode=arc_mode,
         )
         self.save_state()
-        start_mpv(video, audio_only)
+        start_mpv(video, audio_only, arc_mode)
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         notify(
             "🍅 Pomodoro started",
