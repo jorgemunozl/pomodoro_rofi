@@ -11,6 +11,7 @@ from typing import Callable
 from pomodoro_lib.config import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
+    FINISH_FILE,
     MPV_SOCKET,
     PAUSE_FILE,
     PID_FILE,
@@ -78,6 +79,17 @@ def build_arc_playlist(silence_secs: int = ARC_SILENCE_SECONDS) -> Path | None:
     pl.close()
 
     return Path(pl.name)
+
+
+def play_finish_sound() -> None:
+    """Play the finish sound in a one-shot mpv process (no window)."""
+    if not FINISH_FILE.exists():
+        return
+    subprocess.Popen(
+        ["mpv", "--no-terminal", "--no-video", str(FINISH_FILE)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 # ── External tool helpers ─────────────────────────────────────────────────────
@@ -366,7 +378,7 @@ class TimerController:
                 icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
-            icon = "☕"
+            icon = "🔇☕" if state.arc_mode else "☕"
         else:
             raw = state.remaining_seconds
             if raw > work_total:
@@ -406,6 +418,7 @@ class TimerController:
             self.state.break_min = self.state.schedule[idx][1]
 
         if self.state.current >= self.state.total:
+            play_finish_sound()
             notify(
                 "🍅 All done!",
                 f'"{self.state.task}" — {self.state.total} session(s) '
@@ -424,6 +437,10 @@ class TimerController:
         self.state.end_ts = time.time() + self.state.break_min * 60
         self.state.current = next_sess
         self.save_state()
+
+        # In arc mode, pause during breaks for full silence
+        if self.state.arc_mode:
+            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
 
         notify(
             "🍅 Session done!",
@@ -446,6 +463,10 @@ class TimerController:
         self.state.phase = "work"
         self.state.end_ts = time.time() + self.state.work_min * 60
         self.save_state()
+
+        # In arc mode, unpause music when break ends
+        if self.state.arc_mode:
+            mpv_cmd('{"command": ["set_property", "pause", false]}\n')
 
         notify(
             "🍅 Break over!",

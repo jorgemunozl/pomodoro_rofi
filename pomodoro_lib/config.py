@@ -16,6 +16,8 @@ def _find_project_root() -> Path:
 DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
 
+FINISH_FILE = POMO_DIR / "finish.mp3"
+
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
 

@@ -65,7 +65,7 @@ def _status_line() -> str:
         icon = "⏸"
     elif state.phase == "break":
         secs = state.remaining_seconds
-        icon = "☕"
+        icon = "🔇☕" if state.arc_mode else "☕"
     else:
         raw = state.remaining_seconds
         if raw > work_total:
@@ -215,6 +215,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
     task = video = ""
     video_name = ""
     work_min = break_min = total = 0
+    warm_up_secs = 0
     audio_only = False
     arc_mode = False
 
@@ -292,7 +293,11 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         arc_mode=arc_mode,
                     )
                     return True
-                # Personalized → fall through to step 4
+                # Personalized → fall through to step 4, keep warm_up_secs
+
+            else:
+                # No preset — reset warm_up_secs
+                warm_up_secs = 0
 
             # For personalized rhythm or non-default videos, show duration picker
             step = 4
@@ -362,6 +367,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         work_min,
                         break_min,
                         total,
+                        warm_up_secs,
                         audio_only=audio_only,
                         arc_mode=arc_mode,
                     )
@@ -395,7 +401,8 @@ def _handle_status(ctrl: TimerController) -> None:
     )
 
     if state.phase == "break":
-        info = f"☕  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
+        break_icon = "🔇☕" if state.arc_mode else "☕"
+        info = f"{break_icon}  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
     elif in_warmup:
         info = f"🔥  {state.task}   •   {mins}m {secs_rem}s warm-up   •   {state.current}/{state.total}"
     else:
@@ -1362,6 +1369,11 @@ def _handle_start(args: list[str]) -> None:
     warm_up_secs = 0
     schedule = None
 
+    # Look up video preset first (to get warm_up_secs regardless of mode)
+    rhythm_data = _lookup_default_rhythm(video_name)
+    if rhythm_data is not None:
+        _preset_work, _preset_break, _preset_total, warm_up_secs, schedule = rhythm_data
+
     if parsed.rhythm and parsed.rhythm.lower() != "default":
         # User passed a custom rhythm like "25-5" or "50-10"
         try:
@@ -1376,10 +1388,9 @@ def _handle_start(args: list[str]) -> None:
             )
             sys.exit(1)
         total = parsed.count or 1
-        warm_up_secs = parsed.warmup or 0
+        if parsed.warmup is not None:
+            warm_up_secs = parsed.warmup
     else:
-        # Look up default rhythm from POMODORO_DEFAULTS
-        rhythm_data = _lookup_default_rhythm(video_name)
         if rhythm_data is not None:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
         else:
