@@ -6,7 +6,9 @@ import time
 from pathlib import Path
 
 from pomodoro_lib.config import (
+    ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
+    ARC_STARTUP,
     BACK_LABEL,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
@@ -16,6 +18,8 @@ from pomodoro_lib.config import (
     PAUSE_FILE,
     POMO_DIR,
     POMODORO_DEFAULTS,
+    STARTUP_SCHEDULE,
+    STARTUP_SCHEDULE_LABELS,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
@@ -65,7 +69,7 @@ def _status_line() -> str:
         icon = "⏸"
     elif state.phase == "break":
         secs = state.remaining_seconds
-        icon = "🔇☕" if state.arc_mode else "☕"
+        icon = "🏹☕" if state.arc_mode else "☕"
     else:
         raw = state.remaining_seconds
         if raw > work_total:
@@ -77,6 +81,24 @@ def _status_line() -> str:
 
     mins = secs // 60
     secs_rem = secs % 60
+    # Show schedule label if available, otherwise session count
+    if state.schedule_labels:
+        if state.phase == "break":
+            # current was already bumped to next session during transition
+            label_idx = (state.current - 2) * 2 + 1
+            label = (
+                state.schedule_labels[label_idx]
+                if label_idx < len(state.schedule_labels)
+                else ""
+            )
+        else:
+            label_idx = (state.current - 1) * 2
+            label = (
+                state.schedule_labels[label_idx]
+                if label_idx < len(state.schedule_labels)
+                else ""
+            )
+        return f"{icon} {mins:02d}:{secs_rem:02d}  {label}"
     return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
 
@@ -401,7 +423,7 @@ def _handle_status(ctrl: TimerController) -> None:
     )
 
     if state.phase == "break":
-        break_icon = "🔇☕" if state.arc_mode else "☕"
+        break_icon = "🏹" if state.arc_mode else "☕"
         info = f"{break_icon}  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
     elif in_warmup:
         info = f"🔥  {state.task}   •   {mins}m {secs_rem}s warm-up   •   {state.current}/{state.total}"
@@ -1461,6 +1483,70 @@ def _handle_start(args: list[str]) -> None:
         ctrl.clear_state()
 
 
+# ── Startup preset ─────────────────────────────────────────────────────────────
+
+
+def _handle_startup() -> None:
+    """Start a pre-configured startup pomodoro session.
+
+    Uses ARC_SOUNDTRACK with ARC_STARTUP (10 s) silence gaps.
+    Schedule: 15 min work ("polymath") → 2 min break ("set-up")
+              → 13 min work ("applications").
+    """
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    ctrl = TimerController(
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
+    )
+
+    # Compute work_min / break_min from the first tuple for the initial state
+    first_work, first_break = STARTUP_SCHEDULE[0]
+    total = len(STARTUP_SCHEDULE)
+
+    ctrl.start(
+        task="startup",
+        video=str(ARC_SOUNDTRACK),
+        work_min=first_work,
+        break_min=first_break,
+        total=total,
+        warm_up_secs=0,
+        schedule=STARTUP_SCHEDULE,
+        schedule_labels=STARTUP_SCHEDULE_LABELS,
+        audio_only=True,
+        arc_mode=True,
+        silence_secs=ARC_STARTUP,
+    )
+
+    print(
+        f"\U0001f345 Startup: 15m polymath | 2m set-up | 13m applications"
+        f"  \U0001f3b6 ARC ({ARC_STARTUP}s gap)"
+    )
+
+    # Stay alive for transitions (same pattern as _handle_start)
+    try:
+        while STATE_FILE.exists():
+            ctrl.handle_expired()
+            line = _status_line()
+            if not line:
+                break
+            print(f"\r{line}  ", end="", flush=True)
+            time.sleep(1)
+        print()
+    except KeyboardInterrupt:
+        print("\nInterrupted. Stopping session...")
+        ctrl.clear_state()
+
+
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
 
 
@@ -1479,9 +1565,11 @@ def _run_subcommand(args: list[str]) -> None:
         ctrl.skip_phase()
     elif cmd == "start":
         _handle_start(args[1:])
+    elif cmd == "startup":
+        _handle_startup()
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start [options]}",
+            "usage: pomodoro {status|toggle|stop|next|start|startup [options]}",
             file=sys.stderr,
         )
         sys.exit(1)

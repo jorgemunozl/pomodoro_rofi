@@ -22,6 +22,9 @@ class PomodoroState:
     schedule: list = field(
         default_factory=list
     )  # [[work, break], ...] per pomodoro, empty if uniform
+    schedule_labels: list = field(
+        default_factory=list
+    )  # per-phase labels shown in polybar status
 
     @property
     def is_active(self) -> bool:

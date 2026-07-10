@@ -20,6 +20,7 @@ FINISH_FILE = POMO_DIR / "finish.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
+ARC_STARTUP = 10  # shorter silence for the startup preset
 
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
@@ -81,3 +82,12 @@ COUNT_OPTIONS = [
 ]
 
 BACK_LABEL = "↩ Back"
+
+# ── Startup preset ────────────────────────────────────────────────────────────
+# Schedule: each phase is [work_min, break_min]. The last break is ignored.
+STARTUP_SCHEDULE = [[15, 2], [13, 0]]
+# Labels shown in the polybar status line for each phase (work + break).
+# Phase 0 (15 min work) = "polymath"
+# Phase 1 ( 2 min break) = "set-up"
+# Phase 2 (13 min work) = "applications"
+STARTUP_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]

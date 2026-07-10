@@ -8,6 +8,8 @@ Usage:
     pomodoro stop                       Stop current session
     pomodoro next                       Skip to the next phase
     pomodoro start [options]            Start a session with CLI arguments
+    pomodoro startup                    Start the ARC startup preset
+                                        (15m polymath → 2m set-up → 13m applications)
     pomodoro --task <name> --video <file> [options]   (shorthand, same as start)
 
 Options (for start / direct flags):
@@ -29,6 +31,7 @@ Examples:
     pomodoro -t "write" -v "study.mp4" -a            # study.mp4, audio only
     pomodoro --task "arc_read" --video arc            # CURRENT_ARC soundtrack
     pomodoro -t "arc" -v CURRENT_ARC -r "30-6" -c 2  # arc + custom rhythm
+    pomodoro startup                                  # ARC startup preset (10s gaps)
 """
 
 import sys

@@ -120,10 +120,15 @@ def mpv_cmd(json_cmd: str) -> None:
         )
 
 
-def start_mpv(video: str, audio_only: bool = False, arc_mode: bool = False) -> None:
+def start_mpv(
+    video: str,
+    audio_only: bool = False,
+    arc_mode: bool = False,
+    silence_secs: int = ARC_SILENCE_SECONDS,
+) -> None:
     """Launch mpv with the given video file (or playlist for arc_mode)."""
     if arc_mode:
-        pl = build_arc_playlist()
+        pl = build_arc_playlist(silence_secs)
         if pl is None:
             return
         proc = subprocess.Popen(
@@ -236,8 +241,10 @@ class TimerController:
         total: int,
         warm_up_secs: int = 0,
         schedule: list | None = None,
+        schedule_labels: list | None = None,
         audio_only: bool = False,
         arc_mode: bool = False,
+        silence_secs: int = ARC_SILENCE_SECONDS,
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
@@ -252,11 +259,12 @@ class TimerController:
             phase="work",
             warm_up_secs=warm_up_secs,
             schedule=schedule or [],
+            schedule_labels=schedule_labels or [],
             audio_only=audio_only,
             arc_mode=arc_mode,
         )
         self.save_state()
-        start_mpv(video, audio_only, arc_mode)
+        start_mpv(video, audio_only, arc_mode, silence_secs)
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         notify(
             "🍅 Pomodoro started",
@@ -378,7 +386,7 @@ class TimerController:
                 icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
-            icon = "🔇☕" if state.arc_mode else "☕"
+            icon = "🏹" if state.arc_mode else "☕"
         else:
             raw = state.remaining_seconds
             if raw > work_total:
@@ -391,6 +399,24 @@ class TimerController:
 
         mins = secs // 60
         secs_rem = secs % 60
+        # Show schedule label if available, otherwise session count
+        if state.schedule_labels:
+            if state.phase == "break":
+                # current was already bumped to next session during transition
+                label_idx = (state.current - 2) * 2 + 1
+                label = (
+                    state.schedule_labels[label_idx]
+                    if label_idx < len(state.schedule_labels)
+                    else ""
+                )
+            else:
+                label_idx = (state.current - 1) * 2
+                label = (
+                    state.schedule_labels[label_idx]
+                    if label_idx < len(state.schedule_labels)
+                    else ""
+                )
+            return f"{icon} {mins:02d}:{secs_rem:02d}  {label}"
         return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
     # ── Internal timer ────────────────────────────────────────────────────────
