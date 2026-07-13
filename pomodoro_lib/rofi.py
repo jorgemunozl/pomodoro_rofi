@@ -8,6 +8,7 @@ from pomodoro_lib.config import (
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DURATION_PRESETS,
+    POMO_DIR,
     ROFI_THEME,
 )
 
@@ -69,7 +70,7 @@ def _ensure_back_thumb() -> str:
 
     Returns the path to the thumbnail (cached at /tmp/pomo_back_thumb.jpg).
     """
-    thumb = Path("/tmp/pomo_back_thumb.jpg")
+    thumb = POMO_DIR / "feynman.jpg"
     if thumb.exists():
         return str(thumb)
 
@@ -113,16 +114,21 @@ def _ensure_back_thumb() -> str:
     return str(thumb)
 
 
-def pick_video(videos_dir: Path, *, arc_thumb: str | None = None) -> str | None:
+def pick_video(
+    videos_dir: Path,
+    *,
+    arc_thumb: str | None = None,
+    past_arc_thumb: str | None = None,
+) -> str | None:
     """Show video grid with thumbnail icons.
 
-    If *arc_thumb* is provided, prepends a "CURRENT_ARC" entry
-    with that thumbnail to the video list.
+    If *arc_thumb* is provided, prepends a "CURRENT_ARC" entry.
+    If *past_arc_thumb* is provided, prepends a "PAST_ARC" entry.
 
-    Returns the selected filename, "CURRENT_ARC", or None.
+    Returns the selected filename, "CURRENT_ARC", "PAST_ARC", or None.
     """
     videos = sorted(f for f in videos_dir.iterdir() if f.suffix in (".mp4", ".webm"))
-    if not videos and not arc_thumb:
+    if not videos and not arc_thumb and not past_arc_thumb:
         return None
 
     # Build raw input with \0icon\x1f for thumbnails
@@ -131,6 +137,10 @@ def pick_video(videos_dir: Path, *, arc_thumb: str | None = None) -> str | None:
     # CURRENT_ARC entry first, if provided
     if arc_thumb:
         parts.append(f"CURRENT_ARC\0icon\x1f{arc_thumb}")
+
+    # PAST_ARC entry second, if provided
+    if past_arc_thumb:
+        parts.append(f"PAST_ARC\0icon\x1f{past_arc_thumb}")
 
     for v in videos:
         thumb = videos_dir / f"{v.stem}.jpg"

@@ -11,10 +11,15 @@ from typing import Callable
 from pomodoro_lib.config import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
+    BELL_30_FILE,
+    BELL_30_PLAYED,
+    BELL_BEGIN_FILE,
+    BELL_BEGIN_PLAYED,
     FINISH_FILE,
     MPV_SOCKET,
     PAUSE_FILE,
     PID_FILE,
+    REFLECTION_SECS,
     STATE_FILE,
 )
 from pomodoro_lib.state import PomodoroState
@@ -48,7 +53,9 @@ def ensure_silence_mp3(silence_secs: int = ARC_SILENCE_SECONDS) -> Path:
     return path
 
 
-def build_arc_playlist(silence_secs: int = ARC_SILENCE_SECONDS) -> Path | None:
+def build_arc_playlist(
+    directory: Path = ARC_SOUNDTRACK, silence_secs: int = ARC_SILENCE_SECONDS
+) -> Path | None:
     """Build a shuffled playlist of arc tracks interleaved with silence.
 
     Returns a temporary playlist file path, or None if no tracks found.
@@ -56,12 +63,12 @@ def build_arc_playlist(silence_secs: int = ARC_SILENCE_SECONDS) -> Path | None:
     import random
     import tempfile
 
-    if not ARC_SOUNDTRACK.is_dir():
+    if not directory.is_dir():
         return None
 
     tracks = sorted(
         f
-        for f in ARC_SOUNDTRACK.iterdir()
+        for f in directory.iterdir()
         if f.suffix.lower()
         in (".mp3", ".m4a", ".ogg", ".flac", ".wav", ".opus", ".aac")
     )
@@ -87,6 +94,17 @@ def play_finish_sound() -> None:
         return
     subprocess.Popen(
         ["mpv", "--no-terminal", "--no-video", str(FINISH_FILE)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def play_bell(path: Path) -> None:
+    """Play a bell sound in a one-shot mpv process (no window)."""
+    if not path.exists():
+        return
+    subprocess.Popen(
+        ["mpv", "--no-terminal", "--no-video", str(path)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -120,6 +138,19 @@ def mpv_cmd(json_cmd: str) -> None:
         )
 
 
+def fade_arc_volume(remaining_secs: int, fade_window: int = 15) -> None:
+    """Fade mpv volume proportional to remaining seconds in the fade window.
+
+    At remaining_secs >= fade_window  → volume = 100%
+    At remaining_secs = 0            → volume = 0%
+    Only used for ARC-mode work phases.
+    """
+    if remaining_secs >= fade_window:
+        return  # no fade needed
+    vol = max(0, int((remaining_secs / fade_window) * 100))
+    mpv_cmd(f'{{"command": ["set_property", "volume", {vol}]}}\n')
+
+
 def start_mpv(
     video: str,
     audio_only: bool = False,
@@ -128,7 +159,7 @@ def start_mpv(
 ) -> None:
     """Launch mpv with the given video file (or playlist for arc_mode)."""
     if arc_mode:
-        pl = build_arc_playlist(silence_secs)
+        pl = build_arc_playlist(Path(video), silence_secs)
         if pl is None:
             return
         proc = subprocess.Popen(
@@ -229,6 +260,8 @@ class TimerController:
         kill_mpv()
         STATE_FILE.unlink(missing_ok=True)
         PAUSE_FILE.unlink(missing_ok=True)
+        BELL_30_PLAYED.unlink(missing_ok=True)
+        BELL_BEGIN_PLAYED.unlink(missing_ok=True)
         self.state = PomodoroState()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -387,6 +420,9 @@ class TimerController:
         elif state.phase == "break":
             secs = state.remaining_seconds
             icon = "🏹" if state.arc_mode else "☕"
+        elif state.phase == "reflect":
+            secs = state.remaining_seconds
+            icon = "🤔"
         else:
             raw = state.remaining_seconds
             if raw > work_total:
@@ -400,6 +436,8 @@ class TimerController:
         mins = secs // 60
         secs_rem = secs % 60
         # Show schedule label if available, otherwise session count
+        if state.phase == "reflect":
+            return f"{icon} {mins:02d}:{secs_rem:02d}  reflect"
         if state.schedule_labels:
             if state.phase == "break":
                 # current was already bumped to next session during transition
@@ -444,18 +482,18 @@ class TimerController:
             self.state.break_min = self.state.schedule[idx][1]
 
         if self.state.current >= self.state.total:
-            play_finish_sound()
+            # Enter reflection period before finishing
+            self.state.phase = "reflect"
+            self.state.end_ts = time.time() + REFLECTION_SECS
+            self.save_state()
+            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
             notify(
-                "🍅 All done!",
+                "🍅 All sessions complete!",
                 f'"{self.state.task}" — {self.state.total} session(s) '
-                f"of {self.state.work_min}min complete!",
+                f"of {self.state.work_min}min complete.\n"
+                f"🤔 Take a minute to reflect…",
                 urgency="critical",
             )
-            if self._on_session_complete:
-                self._on_session_complete(
-                    self.state.task, self.state.work_min, self.state.total
-                )
-            self.clear_state()
             return
 
         next_sess = self.state.current + 1
@@ -464,9 +502,8 @@ class TimerController:
         self.state.current = next_sess
         self.save_state()
 
-        # In arc mode, pause during breaks for full silence
-        if self.state.arc_mode:
-            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+        # Pause video/audio during breaks for full silence
+        mpv_cmd('{"command": ["set_property", "pause", true]}\n')
 
         notify(
             "🍅 Session done!",
@@ -490,9 +527,13 @@ class TimerController:
         self.state.end_ts = time.time() + self.state.work_min * 60
         self.save_state()
 
-        # In arc mode, unpause music when break ends
+        # Restore volume (ARC fade) and unpause for the next work phase
         if self.state.arc_mode:
-            mpv_cmd('{"command": ["set_property", "pause", false]}\n')
+            mpv_cmd('{"command": ["set_property", "volume", 100]}\n')
+        mpv_cmd('{"command": ["set_property", "pause", false]}\n')
+        # Clean up bell flags from the just-ended break
+        BELL_30_PLAYED.unlink(missing_ok=True)
+        BELL_BEGIN_PLAYED.unlink(missing_ok=True)
 
         notify(
             "🍅 Break over!",
@@ -518,10 +559,12 @@ class TimerController:
             self._transition_work_to_break()
             if STATE_FILE.exists() and self.state.phase == "break":
                 self._run_timer(self.state.break_min * 60, self._on_phase_end)
-        else:
+        elif self.state.phase == "break":
             self._transition_break_to_work()
             if STATE_FILE.exists() and self.state.phase == "work":
                 self._run_timer(self.state.work_min * 60, self._on_phase_end)
+        elif self.state.phase == "reflect":
+            self._on_reflect_end()
 
     def _on_work_end(self) -> None:
         """Called by the timer thread when a work period expires."""
@@ -540,6 +583,25 @@ class TimerController:
         if not self.state.is_active or self.state.phase != "break":
             return
         self._dispatch_transition()
+
+    def _on_reflect_end(self) -> None:
+        """Called when the reflection period expires — finish the session."""
+        if not STATE_FILE.exists():
+            return
+        self.state = PomodoroState.load(STATE_FILE)
+        if not self.state.is_active:
+            return
+        play_finish_sound()
+        notify(
+            "🍅 Time's up!",
+            f'"{self.state.task}" — {self.state.total} session(s) complete!',
+            urgency="critical",
+        )
+        if self._on_session_complete:
+            self._on_session_complete(
+                self.state.task, self.state.work_min, self.state.total
+            )
+        self.clear_state()
 
     # ── Expired-phase check (polybar-driven transitions) ─────────────────────
 
@@ -566,5 +628,7 @@ class TimerController:
         self.state = state
         if state.phase == "work":
             self._transition_work_to_break()
+        elif state.phase == "reflect":
+            self._on_reflect_end()
         else:
             self._transition_break_to_work()

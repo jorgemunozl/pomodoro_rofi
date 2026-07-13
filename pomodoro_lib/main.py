@@ -10,11 +10,16 @@ from pomodoro_lib.config import (
     ARC_SOUNDTRACK,
     ARC_STARTUP,
     BACK_LABEL,
+    BELL_30_FILE,
+    BELL_30_PLAYED,
+    BELL_BEGIN_FILE,
+    BELL_BEGIN_PLAYED,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
     DURATION_PRESETS,
     HISTORY_FILE,
+    PAST_ARC_FILE,
     PAUSE_FILE,
     POMO_DIR,
     POMODORO_DEFAULTS,
@@ -32,7 +37,7 @@ from pomodoro_lib.rofi import (
 )
 from pomodoro_lib.state import PomodoroState
 from pomodoro_lib.tasks import TaskManager
-from pomodoro_lib.timer import TimerController, notify
+from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_bell
 
 # ── Polybar status line ───────────────────────────────────────────────────────
 
@@ -70,6 +75,9 @@ def _status_line() -> str:
     elif state.phase == "break":
         secs = state.remaining_seconds
         icon = "🏹☕" if state.arc_mode else "☕"
+    elif state.phase == "reflect":
+        secs = state.remaining_seconds
+        icon = "🤔"
     else:
         raw = state.remaining_seconds
         if raw > work_total:
@@ -81,7 +89,29 @@ def _status_line() -> str:
 
     mins = secs // 60
     secs_rem = secs % 60
+
+    # Fade ARC music volume during the last 15 seconds of a work phase
+    if (
+        state.arc_mode
+        and state.phase == "work"
+        and not PAUSE_FILE.exists()
+        and not (state.remaining_seconds > work_total)  # not in warm-up
+    ):
+        fade_arc_volume(secs)
+
+    # Bell warnings during breaks
+    if state.phase == "break" and not PAUSE_FILE.exists():
+        rem = state.remaining_seconds
+        if rem <= 30 and not BELL_30_PLAYED.exists():
+            play_bell(BELL_30_FILE)
+            BELL_30_PLAYED.touch()
+        if rem <= 3 and not BELL_BEGIN_PLAYED.exists():
+            play_bell(BELL_BEGIN_FILE)
+            BELL_BEGIN_PLAYED.touch()
+
     # Show schedule label if available, otherwise session count
+    if state.phase == "reflect":
+        return f"{icon} {mins:02d}:{secs_rem:02d}  reflect"
     if state.schedule_labels:
         if state.phase == "break":
             # current was already bumped to next session during transition
@@ -253,7 +283,10 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
 
         elif step == 2:
             arc_thumb = _ensure_arc_thumb()
-            choice = pick_video(POMO_DIR, arc_thumb=arc_thumb)
+            past_arc_thumb = _ensure_past_arc_thumb()
+            choice = pick_video(
+                POMO_DIR, arc_thumb=arc_thumb, past_arc_thumb=past_arc_thumb
+            )
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
@@ -265,6 +298,14 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 arc_mode = True
                 video = str(ARC_SOUNDTRACK)
                 video_name = "CURRENT_ARC"
+                step = 4  # skip mode selection, go straight to duration
+                continue
+
+            if choice == "PAST_ARC":
+                # PAST ARC mode — audio-only from ~/Videos/Music
+                arc_mode = True
+                video = str(PAST_ARC_FILE)
+                video_name = "PAST_ARC"
                 step = 4  # skip mode selection, go straight to duration
                 continue
 
@@ -425,6 +466,8 @@ def _handle_status(ctrl: TimerController) -> None:
     if state.phase == "break":
         break_icon = "🏹" if state.arc_mode else "☕"
         info = f"{break_icon}  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
+    elif state.phase == "reflect":
+        info = f"🤔  {state.task}   •   {mins}m {secs_rem}s reflection   •   all sessions complete"
     elif in_warmup:
         info = f"🔥  {state.task}   •   {mins}m {secs_rem}s warm-up   •   {state.current}/{state.total}"
     else:
@@ -511,7 +554,7 @@ def _resolve_video(name: str) -> Path | None:
     If `name` already has an extension (.mp4, .webm), use it directly.
     Otherwise try .mp4 then .webm.
     """
-    if name.lower() in ("arc", "current_arc"):
+    if name.lower() in ("arc", "current_arc", "past_arc"):
         return None  # sentinel: caller should use arc mode
     p = Path(name)
     if p.suffix in (".mp4", ".webm"):
@@ -1302,6 +1345,15 @@ def _ensure_arc_thumb() -> str:
         return ""
 
 
+def _ensure_past_arc_thumb() -> str:
+    """Return the path to the PAST_ARC thumbnail if it exists.
+
+    Expected at ~/Videos/Music/Music.jpg (already placed by the user).
+    """
+    thumb = PAST_ARC_FILE / "Music.jpg"
+    return str(thumb) if thumb.exists() else ""
+
+
 def _handle_start(args: list[str]) -> None:
     """Start a session directly from CLI arguments (no Rofi UI)."""
     import argparse
@@ -1353,10 +1405,16 @@ def _handle_start(args: list[str]) -> None:
 
     task = parsed.task
     arc_mode = parsed.video.lower() in ("arc", "current_arc")
+    past_arc_mode = parsed.video.lower() == "past_arc"
     random_picked = parsed.video.lower() == "random"
 
     # ── Resolve video path (or pick random / arc) ──────────────────────────
-    if arc_mode:
+    if past_arc_mode:
+        video_name = "PAST_ARC"
+        video_path = PAST_ARC_FILE
+        parsed.audio = True
+        arc_mode = True
+    elif arc_mode:
         # Current arc soundtrack — no video file needed
         video_name = "CURRENT_ARC"
         video_path = ARC_SOUNDTRACK  # used as identifier in state

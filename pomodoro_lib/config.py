@@ -18,14 +18,25 @@ POMO_DIR = Path.home() / "Videos" / "study"
 
 FINISH_FILE = POMO_DIR / "finish.mp3"
 
+BELL_30_FILE = POMO_DIR / "bell_30.mp3"
+BELL_BEGIN_FILE = POMO_DIR / "bell_begin.mp3"
+
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
+
+REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
+
+
+PAST_ARC_FILE = Path.home() / "Videos" / "Music"
+
 
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
 TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
 PAUSE_FILE = Path("/tmp/pomo_pause")
+BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
+BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
 MPV_SOCKET = Path("/tmp/mpvsocket")
 
 TASKS_FILE = DATA_DIR / "tasks"
