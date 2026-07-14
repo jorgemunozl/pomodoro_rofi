@@ -19,6 +19,7 @@ from pomodoro_lib.config import (
     DEFAULT_TASKS,
     DURATION_PRESETS,
     HISTORY_FILE,
+    INCLUDE_DURATION_FILES,
     PAST_ARC_FILE,
     PAUSE_FILE,
     POMO_DIR,
@@ -28,6 +29,7 @@ from pomodoro_lib.config import (
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
+    WORK_BELL_PLAYED,
 )
 from pomodoro_lib.rofi import (
     numbered_menu,
@@ -109,6 +111,17 @@ def _status_line() -> str:
             play_bell(BELL_BEGIN_FILE)
             BELL_BEGIN_PLAYED.touch()
 
+    # Bell 2 s before work ends (ARC mode and INCLUDE_DURATION_FILES only)
+    if (
+        state.phase == "work"
+        and not PAUSE_FILE.exists()
+        and not (state.remaining_seconds > work_total)  # not in warm-up
+        and (state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES)
+    ):
+        if state.remaining_seconds <= 2 and not WORK_BELL_PLAYED.exists():
+            play_bell(BELL_BEGIN_FILE)
+            WORK_BELL_PLAYED.touch()
+
     # Show schedule label if available, otherwise session count
     if state.phase == "reflect":
         return f"{icon} {mins:02d}:{secs_rem:02d}  reflect"
@@ -116,19 +129,18 @@ def _status_line() -> str:
         if state.phase == "break":
             # current was already bumped to next session during transition
             label_idx = (state.current - 2) * 2 + 1
-            label = (
-                state.schedule_labels[label_idx]
-                if label_idx < len(state.schedule_labels)
-                else ""
-            )
+            if (
+                label_idx < len(state.schedule_labels)
+                and state.schedule_labels[label_idx]
+            ):
+                return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
         else:
             label_idx = (state.current - 1) * 2
-            label = (
-                state.schedule_labels[label_idx]
-                if label_idx < len(state.schedule_labels)
-                else ""
-            )
-        return f"{icon} {mins:02d}:{secs_rem:02d}  {label}"
+            if (
+                label_idx < len(state.schedule_labels)
+                and state.schedule_labels[label_idx]
+            ):
+                return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
     return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
 
@@ -1587,6 +1599,7 @@ def _handle_startup() -> None:
 
     print(
         f"\U0001f345 Startup: 15m polymath | 2m set-up | 13m applications"
+        f" | 3× 25/5"
         f"  \U0001f3b6 ARC ({ARC_STARTUP}s gap)"
     )
 

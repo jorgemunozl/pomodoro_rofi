@@ -37,6 +37,7 @@ TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
 PAUSE_FILE = Path("/tmp/pomo_pause")
 BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
 BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
+WORK_BELL_PLAYED = Path("/tmp/pomo_work_bell_played")
 MPV_SOCKET = Path("/tmp/mpvsocket")
 
 TASKS_FILE = DATA_DIR / "tasks"
@@ -46,7 +47,13 @@ HISTORY_FILE = DATA_DIR / "history"
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
 
 
-INCLUDE_DURATION_FILES = ["dr.mp4", "nate.mp4", "steven.mp4"]
+INCLUDE_DURATION_FILES = [
+    "dr.mp4",
+    "nate.mp4",
+    "steven.mp4",
+    "math.mp4",
+    "darkacademia.mp4",
+]
 
 # Variable pomodoro, one of 25-5, two 50-10-2, and 25-5, warm up offset time
 brain_fm = [(25, 5), (50, 10, 2), (25, 5), 110]
@@ -94,11 +101,13 @@ COUNT_OPTIONS = [
 
 BACK_LABEL = "↩ Back"
 
+
 # ── Startup preset ────────────────────────────────────────────────────────────
 # Schedule: each phase is [work_min, break_min]. The last break is ignored.
-STARTUP_SCHEDULE = [[15, 2], [13, 0]]
+STARTUP_SCHEDULE = [[15, 2], [13, 5], [25, 5], [25, 5], [25, 0]]
 # Labels shown in the polybar status line for each phase (work + break).
 # Phase 0 (15 min work) = "polymath"
 # Phase 1 ( 2 min break) = "set-up"
 # Phase 2 (13 min work) = "applications"
+# Remaining phases have no custom label → falls back to current/total
 STARTUP_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]

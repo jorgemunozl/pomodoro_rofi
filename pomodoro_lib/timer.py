@@ -16,11 +16,13 @@ from pomodoro_lib.config import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     FINISH_FILE,
+    INCLUDE_DURATION_FILES,
     MPV_SOCKET,
     PAUSE_FILE,
     PID_FILE,
     REFLECTION_SECS,
     STATE_FILE,
+    WORK_BELL_PLAYED,
 )
 from pomodoro_lib.state import PomodoroState
 
@@ -262,6 +264,7 @@ class TimerController:
         PAUSE_FILE.unlink(missing_ok=True)
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
+        WORK_BELL_PLAYED.unlink(missing_ok=True)
         self.state = PomodoroState()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -442,19 +445,18 @@ class TimerController:
             if state.phase == "break":
                 # current was already bumped to next session during transition
                 label_idx = (state.current - 2) * 2 + 1
-                label = (
-                    state.schedule_labels[label_idx]
-                    if label_idx < len(state.schedule_labels)
-                    else ""
-                )
+                if (
+                    label_idx < len(state.schedule_labels)
+                    and state.schedule_labels[label_idx]
+                ):
+                    return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
             else:
                 label_idx = (state.current - 1) * 2
-                label = (
-                    state.schedule_labels[label_idx]
-                    if label_idx < len(state.schedule_labels)
-                    else ""
-                )
-            return f"{icon} {mins:02d}:{secs_rem:02d}  {label}"
+                if (
+                    label_idx < len(state.schedule_labels)
+                    and state.schedule_labels[label_idx]
+                ):
+                    return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
         return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
     # ── Internal timer ────────────────────────────────────────────────────────
@@ -471,6 +473,16 @@ class TimerController:
 
     # ── Phase transitions (side effects, no timer management) ─────────────────
 
+    def _pause_on_break(self) -> bool:
+        """Whether to pause video/audio during breaks.
+
+        True for ARC mode or videos listed in INCLUDE_DURATION_FILES.
+        """
+        if self.state.arc_mode:
+            return True
+        video_name = Path(self.state.video).name
+        return video_name in INCLUDE_DURATION_FILES
+
     def _transition_work_to_break(self) -> None:
         """Work → break: update state, notify. Does NOT start a timer.
         The video keeps playing uninterrupted across work/break cycles."""
@@ -486,7 +498,9 @@ class TimerController:
             self.state.phase = "reflect"
             self.state.end_ts = time.time() + REFLECTION_SECS
             self.save_state()
-            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+            if self._pause_on_break():
+                mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+            WORK_BELL_PLAYED.unlink(missing_ok=True)
             notify(
                 "🍅 All sessions complete!",
                 f'"{self.state.task}" — {self.state.total} session(s) '
@@ -502,8 +516,10 @@ class TimerController:
         self.state.current = next_sess
         self.save_state()
 
-        # Pause video/audio during breaks for full silence
-        mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+        # Pause video/audio during breaks for ARC mode and INCLUDE_DURATION_FILES
+        if self._pause_on_break():
+            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+        WORK_BELL_PLAYED.unlink(missing_ok=True)
 
         notify(
             "🍅 Session done!",
@@ -530,7 +546,8 @@ class TimerController:
         # Restore volume (ARC fade) and unpause for the next work phase
         if self.state.arc_mode:
             mpv_cmd('{"command": ["set_property", "volume", 100]}\n')
-        mpv_cmd('{"command": ["set_property", "pause", false]}\n')
+        if self._pause_on_break():
+            mpv_cmd('{"command": ["set_property", "pause", false]}\n')
         # Clean up bell flags from the just-ended break
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
