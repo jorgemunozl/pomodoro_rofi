@@ -14,6 +14,7 @@ from pomodoro_lib.config import (
     BELL_30_PLAYED,
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
+    BELL_END_FILE,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
@@ -26,6 +27,9 @@ from pomodoro_lib.config import (
     POMODORO_DEFAULTS,
     STARTUP_SCHEDULE,
     STARTUP_SCHEDULE_LABELS,
+    STARTUP_V2_SCHEDULE,
+    STARTUP_V2_SCHEDULE_LABELS,
+    STARTUP_V2_SWITCH_AT,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
@@ -119,7 +123,7 @@ def _status_line() -> str:
         and (state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES)
     ):
         if state.remaining_seconds <= 2 and not WORK_BELL_PLAYED.exists():
-            play_bell(BELL_BEGIN_FILE)
+            play_bell(BELL_END_FILE)
             WORK_BELL_PLAYED.touch()
 
     # Show schedule label if available, otherwise session count
@@ -1618,6 +1622,74 @@ def _handle_startup() -> None:
         ctrl.clear_state()
 
 
+# ── Startup v2 (dual-ARC) ──────────────────────────────────────────────────────
+
+
+def _handle_startup2() -> None:
+    """Startup v2: CURRENT_ARC for batch 1, PAST_ARC for batch 2.
+
+    Batch 1 (CURRENT_ARC): 20m polymath → 4m set-up → 15m applications
+    Batch 2 (PAST_ARC):     3 × 25/5
+    """
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    ctrl = TimerController(
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
+    )
+
+    first_work, first_break = STARTUP_V2_SCHEDULE[0]
+    total = len(STARTUP_V2_SCHEDULE)
+
+    ctrl.start(
+        task="startup",
+        video=str(ARC_SOUNDTRACK),
+        work_min=first_work,
+        break_min=first_break,
+        total=total,
+        warm_up_secs=0,
+        schedule=STARTUP_V2_SCHEDULE,
+        schedule_labels=STARTUP_V2_SCHEDULE_LABELS,
+        audio_only=True,
+        arc_mode=True,
+        silence_secs=ARC_STARTUP,
+    )
+
+    # Configure audio switch: after the first batch, switch to PAST_ARC
+    state = PomodoroState.load(STATE_FILE)
+    state.arc_switch_at = STARTUP_V2_SWITCH_AT
+    state.arc_switch_dir = str(PAST_ARC_FILE)
+    state.save(STATE_FILE)
+
+    print(
+        f"\U0001f345 Startup v2: 20m polymath | 4m set-up | 15m applications"
+        f"  \U0001f3b6 CURRENT_ARC"
+        f"  →  3× 25/5  \U0001f3b6 PAST_ARC"
+    )
+
+    try:
+        while STATE_FILE.exists():
+            ctrl.handle_expired()
+            line = _status_line()
+            if not line:
+                break
+            print(f"\r{line}  ", end="", flush=True)
+            time.sleep(1)
+        print()
+    except KeyboardInterrupt:
+        print("\nInterrupted. Stopping session...")
+        ctrl.clear_state()
+
+
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
 
 
@@ -1638,9 +1710,11 @@ def _run_subcommand(args: list[str]) -> None:
         _handle_start(args[1:])
     elif cmd == "startup":
         _handle_startup()
+    elif cmd == "startup2":
+        _handle_startup2()
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|startup [options]}",
+            "usage: pomodoro {status|toggle|stop|next|start|startup|startup2 [options]}",
             file=sys.stderr,
         )
         sys.exit(1)

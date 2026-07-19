@@ -541,6 +541,19 @@ class TimerController:
 
         self.state.phase = "work"
         self.state.end_ts = time.time() + self.state.work_min * 60
+
+        # Switch ARC audio source mid-session if configured
+        if (
+            self.state.arc_switch_at
+            and self.state.current >= self.state.arc_switch_at
+            and self.state.arc_switch_dir
+        ):
+            kill_mpv()
+            start_mpv(self.state.arc_switch_dir, audio_only=True, arc_mode=True)
+            self.state.video = self.state.arc_switch_dir
+            self.state.arc_switch_at = 0
+            self.state.arc_switch_dir = ""
+
         self.save_state()
 
         # Restore volume (ARC fade) and unpause for the next work phase

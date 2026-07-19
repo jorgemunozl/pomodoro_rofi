@@ -20,6 +20,7 @@ FINISH_FILE = POMO_DIR / "finish.mp3"
 
 BELL_30_FILE = POMO_DIR / "bell_30.mp3"
 BELL_BEGIN_FILE = POMO_DIR / "bell_begin.mp3"
+BELL_END_FILE = POMO_DIR / "bell_end.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
@@ -111,3 +112,10 @@ STARTUP_SCHEDULE = [[15, 2], [13, 5], [25, 5], [25, 5], [25, 0]]
 # Phase 2 (13 min work) = "applications"
 # Remaining phases have no custom label → falls back to current/total
 STARTUP_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
+
+# ── Startup v2 (dual-ARC) ─────────────────────────────────────────────────────
+# Batch 1: CURRENT_ARC  — 20 min polymath / 4 min set-up / 15 min applications
+# Batch 2: PAST_ARC     — 3 × 25/5
+STARTUP_V2_SCHEDULE = [[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]]
+STARTUP_V2_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
+STARTUP_V2_SWITCH_AT = 3  # switch to PAST_ARC when pomodoro 3 starts
