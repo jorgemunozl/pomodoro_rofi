@@ -25,10 +25,9 @@ class PomodoroState:
     schedule_labels: list = field(
         default_factory=list
     )  # per-phase labels shown in polybar status
-    arc_switch_at: int = (
-        0  # switch ARC audio source when current reaches this (0=never)
-    )
-    arc_switch_dir: str = ""  # directory to switch to
+    arc_switches: list = field(
+        default_factory=list
+    )  # [[at_pomodoro, dir_path], ...] — sequential ARC audio switches
 
     @property
     def is_active(self) -> bool:

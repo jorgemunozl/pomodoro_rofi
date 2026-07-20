@@ -543,16 +543,13 @@ class TimerController:
         self.state.end_ts = time.time() + self.state.work_min * 60
 
         # Switch ARC audio source mid-session if configured
-        if (
-            self.state.arc_switch_at
-            and self.state.current >= self.state.arc_switch_at
-            and self.state.arc_switch_dir
-        ):
-            kill_mpv()
-            start_mpv(self.state.arc_switch_dir, audio_only=True, arc_mode=True)
-            self.state.video = self.state.arc_switch_dir
-            self.state.arc_switch_at = 0
-            self.state.arc_switch_dir = ""
+        if self.state.arc_switches:
+            at, target_dir = self.state.arc_switches[0]
+            if self.state.current >= at:
+                kill_mpv()
+                start_mpv(target_dir, audio_only=True, arc_mode=True)
+                self.state.video = target_dir
+                self.state.arc_switches.pop(0)
 
         self.save_state()
 
@@ -585,6 +582,8 @@ class TimerController:
     def _dispatch_transition(self) -> None:
         """Perform the transition for the current phase and start a timer for the
         new phase.  This is only reliable when the calling process stays alive."""
+        if PAUSE_FILE.exists():
+            return  # paused – do not advance (polybar-driven handle_expired will)
         if self.state.phase == "work":
             self._transition_work_to_break()
             if STATE_FILE.exists() and self.state.phase == "break":

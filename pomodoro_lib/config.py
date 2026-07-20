@@ -26,6 +26,8 @@ ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
 
+ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past_arc"
+
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
 
@@ -118,4 +120,17 @@ STARTUP_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
 # Batch 2: PAST_ARC     — 3 × 25/5
 STARTUP_V2_SCHEDULE = [[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]]
 STARTUP_V2_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
-STARTUP_V2_SWITCH_AT = 3  # switch to PAST_ARC when pomodoro 3 starts
+STARTUP_V2_SWITCHES = [
+    [3, str(PAST_ARC_FILE)],
+]
+
+# ── Startup v3 (triple-ARC) ────────────────────────────────────────────────────
+# Batch 1: CURRENT_ARC          — 20m polymath / 4m set-up / 15m applications
+# Batch 2: ARC_SOUNDTRACKS_PAST — 1 × 25/5
+# Batch 3: PAST_ARC             — 2 × 25/5
+STARTUP_V3_SCHEDULE = [[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]]
+STARTUP_V3_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
+STARTUP_V3_SWITCHES = [
+    [3, str(Path.home() / "Videos" / "past_arc")],
+    [4, str(Path.home() / "Videos" / "Music")],
+]
