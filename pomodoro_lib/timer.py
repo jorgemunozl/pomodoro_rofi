@@ -215,11 +215,19 @@ def start_mpv(
 
 
 def kill_mpv() -> None:
-    """Kill the mpv process and clean up."""
+    """Kill the mpv process and clean up.  Waits for the process to actually
+    terminate before returning, so a subsequent start_mpv() won't overlap."""
     if PID_FILE.exists():
         try:
             pid = int(PID_FILE.read_text().strip())
             os.kill(pid, signal.SIGTERM)
+            # Wait for the process to actually die (up to 2 seconds)
+            for _ in range(40):
+                try:
+                    os.kill(pid, 0)  # signal 0 = check if alive
+                    time.sleep(0.05)
+                except OSError:
+                    break  # process is gone
         except (ProcessLookupError, ValueError, FileNotFoundError):
             pass
     PID_FILE.unlink(missing_ok=True)
@@ -543,12 +551,24 @@ class TimerController:
         self.state.end_ts = time.time() + self.state.work_min * 60
 
         # Switch ARC audio source mid-session if configured
+        # Format: [at_pomodoro, path, arc_mode]
+        #   arc_mode=True  → ARC directory (build playlist)
+        #   arc_mode=False → regular video file
         if self.state.arc_switches:
-            at, target_dir = self.state.arc_switches[0]
+            at, target_path = (
+                self.state.arc_switches[0][0],
+                self.state.arc_switches[0][1],
+            )
+            target_arc = (
+                self.state.arc_switches[0][2]
+                if len(self.state.arc_switches[0]) >= 3
+                else True
+            )
             if self.state.current >= at:
                 kill_mpv()
-                start_mpv(target_dir, audio_only=True, arc_mode=True)
-                self.state.video = target_dir
+                start_mpv(target_path, audio_only=True, arc_mode=target_arc)
+                self.state.video = target_path
+                self.state.arc_mode = target_arc
                 self.state.arc_switches.pop(0)
 
         self.save_state()

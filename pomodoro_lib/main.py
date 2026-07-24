@@ -25,14 +25,7 @@ from pomodoro_lib.config import (
     PAUSE_FILE,
     POMO_DIR,
     POMODORO_DEFAULTS,
-    STARTUP_SCHEDULE,
-    STARTUP_SCHEDULE_LABELS,
-    STARTUP_V2_SCHEDULE,
-    STARTUP_V2_SCHEDULE_LABELS,
-    STARTUP_V2_SWITCHES,
-    STARTUP_V3_SCHEDULE,
-    STARTUP_V3_SCHEDULE_LABELS,
-    STARTUP_V3_SWITCHES,
+    STARTUP_PRESETS,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
@@ -1560,16 +1553,13 @@ def _handle_start(args: list[str]) -> None:
         ctrl.clear_state()
 
 
-# ── Startup preset ─────────────────────────────────────────────────────────────
+# ── Startup preset handler ──────────────────────────────────────────────────────
 
 
-def _handle_startup() -> None:
-    """Start a pre-configured startup pomodoro session.
+def _handle_startup_preset(name: str) -> None:
+    """Start a pre-configured startup pomodoro session."""
+    preset = STARTUP_PRESETS[name]
 
-    Uses ARC_SOUNDTRACK with ARC_STARTUP (10 s) silence gaps.
-    Schedule: 15 min work ("polymath") → 2 min break ("set-up")
-              → 13 min work ("applications").
-    """
     if STATE_FILE.exists():
         state = PomodoroState.load(STATE_FILE)
         print(
@@ -1586,166 +1576,30 @@ def _handle_startup() -> None:
         on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
     )
 
-    # Compute work_min / break_min from the first tuple for the initial state
-    first_work, first_break = STARTUP_SCHEDULE[0]
-    total = len(STARTUP_SCHEDULE)
+    first_work, first_break = preset.schedule[0]
+    total = len(preset.schedule)
 
     ctrl.start(
         task="startup",
-        video=str(ARC_SOUNDTRACK),
+        video=preset.start_dir,
         work_min=first_work,
         break_min=first_break,
         total=total,
         warm_up_secs=0,
-        schedule=STARTUP_SCHEDULE,
-        schedule_labels=STARTUP_SCHEDULE_LABELS,
+        schedule=preset.schedule,
+        schedule_labels=preset.labels,
         audio_only=True,
         arc_mode=True,
-        silence_secs=ARC_STARTUP,
+        silence_secs=preset.silence_secs,
     )
 
-    print(
-        f"\U0001f345 Startup: 15m polymath | 2m set-up | 13m applications"
-        f" | 3× 25/5"
-        f"  \U0001f3b6 ARC ({ARC_STARTUP}s gap)"
-    )
-
-    # Stay alive for transitions (same pattern as _handle_start)
-    try:
-        while STATE_FILE.exists():
-            ctrl.handle_expired()
-            line = _status_line()
-            if not line:
-                break
-            print(f"\r{line}  ", end="", flush=True)
-            time.sleep(1)
-        print()
-    except KeyboardInterrupt:
-        print("\nInterrupted. Stopping session...")
-        ctrl.clear_state()
-
-
-# ── Startup v2 (dual-ARC) ──────────────────────────────────────────────────────
-
-
-def _handle_startup2() -> None:
-    """Startup v2: CURRENT_ARC for batch 1, PAST_ARC for batch 2.
-
-    Batch 1 (CURRENT_ARC): 20m polymath → 4m set-up → 15m applications
-    Batch 2 (PAST_ARC):     3 × 25/5
-    """
-    if STATE_FILE.exists():
+    # Configure audio switches if any
+    if preset.switches:
         state = PomodoroState.load(STATE_FILE)
-        print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        state.arc_switches = preset.switches
+        state.save(STATE_FILE)
 
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
-    )
-
-    first_work, first_break = STARTUP_V2_SCHEDULE[0]
-    total = len(STARTUP_V2_SCHEDULE)
-
-    ctrl.start(
-        task="startup",
-        video=str(ARC_SOUNDTRACK),
-        work_min=first_work,
-        break_min=first_break,
-        total=total,
-        warm_up_secs=0,
-        schedule=STARTUP_V2_SCHEDULE,
-        schedule_labels=STARTUP_V2_SCHEDULE_LABELS,
-        audio_only=True,
-        arc_mode=True,
-        silence_secs=ARC_STARTUP,
-    )
-
-    # Configure audio switch: after the first batch, switch to PAST_ARC
-    state = PomodoroState.load(STATE_FILE)
-    state.arc_switches = STARTUP_V2_SWITCHES
-    state.save(STATE_FILE)
-
-    print(
-        f"\U0001f345 Startup v2: 20m polymath | 4m set-up | 15m applications"
-        f"  \U0001f3b6 CURRENT_ARC"
-        f"  →  3× 25/5  \U0001f3b6 PAST_ARC"
-    )
-
-    try:
-        while STATE_FILE.exists():
-            ctrl.handle_expired()
-            line = _status_line()
-            if not line:
-                break
-            print(f"\r{line}  ", end="", flush=True)
-            time.sleep(1)
-        print()
-    except KeyboardInterrupt:
-        print("\nInterrupted. Stopping session...")
-        ctrl.clear_state()
-
-
-# ── Startup v3 (triple-ARC) ─────────────────────────────────────────────────────
-
-
-def _handle_startup3() -> None:
-    """Startup v3: CURRENT_ARC → ARC_SOUNDTRACKS_PAST → PAST_ARC.
-
-    Batch 1 (CURRENT_ARC):          20m polymath / 4m set-up / 15m applications
-    Batch 2 (ARC_SOUNDTRACKS_PAST):  1 × 25/5
-    Batch 3 (PAST_ARC):             2 × 25/5
-    """
-    if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
-        print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
-    )
-
-    first_work, first_break = STARTUP_V3_SCHEDULE[0]
-    total = len(STARTUP_V3_SCHEDULE)
-
-    ctrl.start(
-        task="startup",
-        video=str(ARC_SOUNDTRACK),
-        work_min=first_work,
-        break_min=first_break,
-        total=total,
-        warm_up_secs=0,
-        schedule=STARTUP_V3_SCHEDULE,
-        schedule_labels=STARTUP_V3_SCHEDULE_LABELS,
-        audio_only=True,
-        arc_mode=True,
-        silence_secs=ARC_STARTUP,
-    )
-
-    # Configure two sequential audio switches
-    state = PomodoroState.load(STATE_FILE)
-    state.arc_switches = STARTUP_V3_SWITCHES
-    state.save(STATE_FILE)
-
-    print(
-        f"\U0001f345 Startup v3: 20m polymath | 4m set-up | 15m applications"
-        f"  \U0001f3b6 CURRENT_ARC"
-        f"  →  25/5  \U0001f3b6 PAST_ARC"
-        f"  →  2× 25/5  \U0001f3b6 MUSIC"
-    )
+    print(f"\U0001f345 {name}: {preset.description}")
 
     try:
         while STATE_FILE.exists():
@@ -1779,12 +1633,8 @@ def _run_subcommand(args: list[str]) -> None:
         ctrl.skip_phase()
     elif cmd == "start":
         _handle_start(args[1:])
-    elif cmd == "startup":
-        _handle_startup()
-    elif cmd == "startup2":
-        _handle_startup2()
-    elif cmd == "startup3":
-        _handle_startup3()
+    elif cmd in STARTUP_PRESETS:
+        _handle_startup_preset(cmd)
     else:
         print(
             "usage: pomodoro {status|toggle|stop|next|start|startup|startup2|startup3 [options]}",

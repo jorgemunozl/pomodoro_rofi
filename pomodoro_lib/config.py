@@ -105,32 +105,74 @@ COUNT_OPTIONS = [
 BACK_LABEL = "↩ Back"
 
 
-# ── Startup preset ────────────────────────────────────────────────────────────
-# Schedule: each phase is [work_min, break_min]. The last break is ignored.
-STARTUP_SCHEDULE = [[15, 2], [13, 5], [25, 5], [25, 5], [25, 0]]
-# Labels shown in the polybar status line for each phase (work + break).
-# Phase 0 (15 min work) = "polymath"
-# Phase 1 ( 2 min break) = "set-up"
-# Phase 2 (13 min work) = "applications"
-# Remaining phases have no custom label → falls back to current/total
-STARTUP_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
+# ── Startup presets ────────────────────────────────────────────────────────────
 
-# ── Startup v2 (dual-ARC) ─────────────────────────────────────────────────────
-# Batch 1: CURRENT_ARC  — 20 min polymath / 4 min set-up / 15 min applications
-# Batch 2: PAST_ARC     — 3 × 25/5
-STARTUP_V2_SCHEDULE = [[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]]
-STARTUP_V2_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
-STARTUP_V2_SWITCHES = [
-    [3, str(PAST_ARC_FILE)],
-]
+from dataclasses import dataclass
 
-# ── Startup v3 (triple-ARC) ────────────────────────────────────────────────────
-# Batch 1: CURRENT_ARC          — 20m polymath / 4m set-up / 15m applications
-# Batch 2: ARC_SOUNDTRACKS_PAST — 1 × 25/5
-# Batch 3: PAST_ARC             — 2 × 25/5
-STARTUP_V3_SCHEDULE = [[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]]
-STARTUP_V3_SCHEDULE_LABELS = ["polymath", "set-up", "applications"]
-STARTUP_V3_SWITCHES = [
-    [3, str(Path.home() / "Videos" / "past_arc")],
-    [4, str(Path.home() / "Videos" / "Music")],
-]
+
+@dataclass
+class StartupPreset:
+    """A pre-configured startup pomodoro session."""
+
+    schedule: list  # [[work_min, break_min], ...]  — last break is ignored
+    labels: list  # per-phase polybar labels (shorter than schedule → fallback)
+    switches: list  # [[at_pomodoro, path, arc_mode?], ...]
+    start_dir: str  # initial ARC directory or video path
+    silence_secs: int  # silence between ARC tracks
+    description: str  # one-line summary for the terminal
+
+
+STARTUP_PRESETS: dict[str, StartupPreset] = {
+    "startup": StartupPreset(
+        schedule=[[15, 2], [13, 5], [25, 5], [25, 5], [25, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_STARTUP,
+        description="15m polymath | 2m set-up | 13m applications | 3× 25/5  🎶 CURRENT_ARC",
+    ),
+    "startup2": StartupPreset(
+        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[[3, str(PAST_ARC_FILE)]],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_STARTUP,
+        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  3× 25/5  🎶 PAST_ARC",
+    ),
+    "startup3": StartupPreset(
+        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[
+            [3, str(ARC_SOUNDTRACKS_PAST)],
+            [4, str(PAST_ARC_FILE)],
+        ],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_STARTUP,
+        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  25/5  🎶 PAST_ARC  →  2× 25/5  🎶 MUSIC",
+    ),
+    "startup4": StartupPreset(
+        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 5], [25, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[[3, str(POMO_DIR / "christmas_2025-I.webm"), False]],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_STARTUP,
+        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  christmas_2025-I.webm  used on the night",
+    ),
+    "startup5": StartupPreset(
+        schedule=[[20, 4], [15, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[],
+        # start_dir=str(PAST_ARC_FILE),
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="noon",
+    ),
+    "startup6": StartupPreset(
+        schedule=[[20, 4], [15, 0]],
+        labels=["polymath", "set-up", "applications"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="morning",
+    ),
+}
