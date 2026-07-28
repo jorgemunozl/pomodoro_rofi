@@ -22,22 +22,22 @@ BELL_30_FILE = POMO_DIR / "bell_30.mp3"
 BELL_BEGIN_FILE = POMO_DIR / "bell_begin.mp3"
 BELL_END_FILE = POMO_DIR / "bell_end.mp3"
 
-ARC_SOUNDTRACK = Path.home() / "Videos" / "current_arc"
+ARC_SOUNDTRACK = Path.home() / "Videos" / "current-arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
 
-ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past_arc"
+ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
-
-PAST_ARC_FILE = Path.home() / "Videos" / "Music"
+PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
 TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
 PAUSE_FILE = Path("/tmp/pomo_pause")
+PAUSE_TS = Path("/tmp/pomo_pause_ts")
 BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
 BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
 WORK_BELL_PLAYED = Path("/tmp/pomo_work_bell_played")
@@ -151,7 +151,14 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  25/5  🎶 PAST_ARC  →  2× 25/5  🎶 MUSIC",
     ),
     "startup4": StartupPreset(
-        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 5], [25, 0]],
+        schedule=[
+            [15, 2],
+            [15, 1],
+            [25, 5],
+            [25, 5],
+            [25, 5],
+            [25, 0],
+        ],  # TODO: Warm up time lacking
         labels=["polymath", "set-up", "applications"],
         switches=[[3, str(POMO_DIR / "christmas_2025-I.webm"), False]],
         start_dir=str(ARC_SOUNDTRACK),
@@ -159,7 +166,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  christmas_2025-I.webm  used on the night",
     ),
     "startup5": StartupPreset(
-        schedule=[[20, 4], [15, 0]],
+        schedule=[[20, 4], [20, 0]],
         labels=["polymath", "set-up", "applications"],
         switches=[],
         # start_dir=str(PAST_ARC_FILE),
@@ -168,11 +175,25 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="noon",
     ),
     "startup6": StartupPreset(
-        schedule=[[20, 4], [15, 0]],
-        labels=["polymath", "set-up", "applications"],
+        schedule=[
+            [18, 3],
+            [17, 1],
+            [10, 1],
+            [10, 0],
+        ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
+        labels=[
+            "polymath",
+            "set-up",
+            "applications",
+            "vault",
+            "chess",
+            "chess review",
+            "quanta magazine",
+            "plan, plan",
+        ],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="morning",
+        description="morning winter ritual",
     ),
 }

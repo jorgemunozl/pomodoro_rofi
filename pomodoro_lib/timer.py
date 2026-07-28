@@ -19,7 +19,9 @@ from pomodoro_lib.config import (
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
     PAUSE_FILE,
+    PAUSE_TS,
     PID_FILE,
+    POMODORO_DEFAULTS,
     REFLECTION_SECS,
     STATE_FILE,
     WORK_BELL_PLAYED,
@@ -270,6 +272,7 @@ class TimerController:
         kill_mpv()
         STATE_FILE.unlink(missing_ok=True)
         PAUSE_FILE.unlink(missing_ok=True)
+        PAUSE_TS.unlink(missing_ok=True)
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
         WORK_BELL_PLAYED.unlink(missing_ok=True)
@@ -338,6 +341,7 @@ class TimerController:
         state = PomodoroState.load(STATE_FILE)
         secs_left = state.remaining_seconds
         PAUSE_FILE.write_text(str(secs_left))
+        PAUSE_TS.write_text(str(time.time()))
         self._stop_event.set()
         if (
             self._thread
@@ -367,6 +371,7 @@ class TimerController:
 
         secs_left = int(PAUSE_FILE.read_text().strip())
         PAUSE_FILE.unlink()
+        PAUSE_TS.unlink(missing_ok=True)
         self.state = PomodoroState.load(STATE_FILE)
         self.state.end_ts = time.time() + secs_left
         self.save_state()
@@ -570,6 +575,19 @@ class TimerController:
                 self.state.video = target_path
                 self.state.arc_mode = target_arc
                 self.state.arc_switches.pop(0)
+
+                # Look up warm-up seconds if switching to a known video
+                if not target_arc:
+                    video_name = Path(target_path).name
+                    for entry in POMODORO_DEFAULTS:
+                        if entry[0] == video_name:
+                            warm_up = entry[4] if len(entry) >= 5 else 0
+                            if warm_up:
+                                self.state.warm_up_secs = int(warm_up)
+                                self.state.end_ts = (
+                                    time.time() + warm_up + self.state.work_min * 60
+                                )
+                            break
 
         self.save_state()
 

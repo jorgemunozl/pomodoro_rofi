@@ -21,8 +21,10 @@ from pomodoro_lib.config import (
     DURATION_PRESETS,
     HISTORY_FILE,
     INCLUDE_DURATION_FILES,
+    MPV_SOCKET,
     PAST_ARC_FILE,
     PAUSE_FILE,
+    PAUSE_TS,
     POMO_DIR,
     POMODORO_DEFAULTS,
     STARTUP_PRESETS,
@@ -53,6 +55,29 @@ def _status_line() -> str:
     """
     if not STATE_FILE.exists():
         return ""
+
+    # Auto-unpause if paused for more than 5 minutes
+    if PAUSE_FILE.exists() and PAUSE_TS.exists():
+        try:
+            paused_since = float(PAUSE_TS.read_text().strip())
+            if time.time() - paused_since > 300:
+                secs_left = int(PAUSE_FILE.read_text().strip())
+                PAUSE_FILE.unlink()
+                PAUSE_TS.unlink()
+                state = PomodoroState.load(STATE_FILE)
+                state.end_ts = time.time() + secs_left
+                state.save(STATE_FILE)
+                import subprocess  # send unpause to mpv socket
+
+                if MPV_SOCKET.exists():
+                    subprocess.run(
+                        ["socat", "-", str(MPV_SOCKET)],
+                        input='{"command": ["set_property", "pause", false]}\n',
+                        capture_output=True,
+                        text=True,
+                    )
+        except (ValueError, OSError):
+            pass
 
     # Handle any expired phases BEFORE computing the status line.
     # This is the *reliable* transition mechanism – the daemon timer
@@ -105,11 +130,17 @@ def _status_line() -> str:
     if state.phase == "break" and not PAUSE_FILE.exists():
         rem = state.remaining_seconds
         if rem <= 30 and not BELL_30_PLAYED.exists():
-            play_bell(BELL_30_FILE)
-            BELL_30_PLAYED.touch()
+            try:
+                BELL_30_PLAYED.touch(exist_ok=False)
+                play_bell(BELL_30_FILE)
+            except FileExistsError:
+                pass
         if rem <= 3 and not BELL_BEGIN_PLAYED.exists():
-            play_bell(BELL_BEGIN_FILE)
-            BELL_BEGIN_PLAYED.touch()
+            try:
+                BELL_BEGIN_PLAYED.touch(exist_ok=False)
+                play_bell(BELL_BEGIN_FILE)
+            except FileExistsError:
+                pass
 
     # Bell 2 s before work ends (ARC mode and INCLUDE_DURATION_FILES only)
     if (
@@ -119,8 +150,11 @@ def _status_line() -> str:
         and (state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES)
     ):
         if state.remaining_seconds <= 2 and not WORK_BELL_PLAYED.exists():
-            play_bell(BELL_END_FILE)
-            WORK_BELL_PLAYED.touch()
+            try:
+                WORK_BELL_PLAYED.touch(exist_ok=False)
+                play_bell(BELL_END_FILE)
+            except FileExistsError:
+                pass  # another process already played it
 
     # Show schedule label if available, otherwise session count
     if state.phase == "reflect":
@@ -1362,7 +1396,7 @@ def _ensure_past_arc_thumb() -> str:
 
     Expected at ~/Videos/Music/Music.jpg (already placed by the user).
     """
-    thumb = PAST_ARC_FILE / "Music.jpg"
+    thumb = PAST_ARC_FILE / "music.jpg"
     return str(thumb) if thumb.exists() else ""
 
 
