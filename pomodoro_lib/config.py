@@ -32,14 +32,13 @@ REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
-
 # COMMANDS
-open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:📚" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
-open_personal = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_github = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_hugg = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣 && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
+open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/member/jorgemunozl"'
+open_github = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
+open_hugg = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://huggingface.co/jorgemunozl"'
+open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
@@ -117,6 +116,18 @@ BACK_LABEL = "↩ Back"
 
 from dataclasses import dataclass
 
+# ── Notification colors ────────────────────────────────────────────────────────
+# Map color names to dunst urgency levels. Configure your dunstrc per urgency.
+
+NOTIFY_COLORS: dict[str, str] = {
+    "default": "critical",
+    "red": "critical",
+    "yellow": "normal",
+    "blue": "low",
+    "green": "normal",
+    "purple": "normal",
+}
+
 
 @dataclass
 class StartupPreset:
@@ -129,6 +140,7 @@ class StartupPreset:
     silence_secs: int  # silence between ARC tracks
     description: str  # one-line summary for the terminal
     commands: dict[str, list[str]] | None = None  # per-preset event commands
+    notify_color: str = "default"  # see NOTIFY_COLORS for available names
 
 
 # ── Event-driven commands ────────────────────────────────────────────────────
@@ -223,10 +235,11 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         schedule=[[20, 4], [20, 0]],
         labels=["polymath", "set-up", "applications"],
         switches=[],
-        # start_dir=str(PAST_ARC_FILE), # 16 min planning is tg
+        # start_dir=str(PAST_ARC_FILE),
         start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon",
+        notify_color="blue",
     ),
     "startup6": StartupPreset(
         schedule=[
@@ -235,7 +248,6 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             [10, 1],
             [10, 0],
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
-        # Open and focus vault properly
         labels=[
             "polymath",
             "set-up",
@@ -250,14 +262,15 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
         description="morning winter ritual",
+        notify_color="yellow",
     ),
     "startup7": StartupPreset(
-        schedule=[[15, 1], [15, 1]],
+        schedule=[[29, 1], [29, 1]],
         labels=["problem solving", "review", "problem solving", "review"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="afternoon of problem solving from four to six",
+        description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
         schedule=[[0.1, 0.1], [1, 0.1]],

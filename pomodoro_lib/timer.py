@@ -19,6 +19,7 @@ from pomodoro_lib.config import (
     FINISH_FILE,
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
+    NOTIFY_COLORS,
     PAUSE_FILE,
     PAUSE_TS,
     PID_FILE,
@@ -118,9 +119,22 @@ def play_bell(path: Path) -> None:
 # ── External tool helpers ─────────────────────────────────────────────────────
 
 
-def notify(summary: str, body: str = "", urgency: str = "normal") -> None:
+def notify(
+    summary: str,
+    body: str = "",
+    urgency: str = "normal",
+    color: str | None = None,
+) -> None:
+    """Send a dunst notification.
+
+    *urgency* is a direct dunst urgency level (low|normal|critical).
+    *color* is a named color (default|red|yellow|blue|…) from NOTIFY_COLORS.
+    If both are given, *color* wins.
+    """
+    if color:
+        urgency = NOTIFY_COLORS.get(color, urgency)
     subprocess.run(
-        ["dunstify", "-u", "critical", summary, body],
+        ["dunstify", "-u", urgency, summary, body],
         capture_output=True,
     )
 
@@ -274,6 +288,13 @@ class TimerController:
         self._on_session_complete = on_session_complete
         self._cmd_runner = cmd_runner or CommandRunner()
 
+    def _notify(self, summary: str, body: str = "", urgency: str | None = None) -> None:
+        """Send a notification using the session's notify_color by default."""
+        if urgency:
+            notify(summary, body, urgency=urgency)
+        else:
+            notify(summary, body, color=self.state.notify_color)
+
     # ── State persistence ─────────────────────────────────────────────────────
     def load_state(self) -> bool:
         self.state = PomodoroState.load(STATE_FILE)
@@ -316,6 +337,7 @@ class TimerController:
         audio_only: bool = False,
         arc_mode: bool = False,
         silence_secs: int = ARC_SILENCE_SECONDS,
+        notify_color: str = "default",
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
@@ -333,6 +355,7 @@ class TimerController:
             schedule_labels=schedule_labels or [],
             audio_only=audio_only,
             arc_mode=arc_mode,
+            notify_color=notify_color,
         )
         self.save_state()
         start_mpv(video, audio_only, arc_mode, silence_secs)
@@ -346,7 +369,7 @@ class TimerController:
             video=video,
         )
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
-        notify(
+        self._notify(
             "🍅 Pomodoro started",
             f"{task} — session 1/{total}\n"
             f"{warmup_note}{work_min}min focus — "
@@ -386,7 +409,11 @@ class TimerController:
         self._thread = None
         # Pause mpv (video plays continuously across all phases)
         mpv_cmd('{"command": ["set_property", "pause", true]}\n')
-        notify("🍅 Pomodoro paused", f"{secs_left // 60}m left")
+        notify(
+            "🍅 Pomodoro paused",
+            f"{secs_left // 60}m left",
+            color=state.notify_color,
+        )
 
     def resume(self) -> None:
         if not PAUSE_FILE.exists():
@@ -413,7 +440,7 @@ class TimerController:
         if MPV_SOCKET.exists():
             mpv_cmd('{"command": ["set_property", "pause", false]}\n')
 
-        notify(
+        self._notify(
             "🍅 Pomodoro resumed",
             f"{secs_left // 60}m left — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
@@ -547,12 +574,11 @@ class TimerController:
             if self._pause_on_break():
                 mpv_cmd('{"command": ["set_property", "pause", true]}\n')
             WORK_BELL_PLAYED.unlink(missing_ok=True)
-            notify(
+            self._notify(
                 "🍅 All sessions complete!",
                 f'"{self.state.task}" — {self.state.total} session(s) '
                 f"of {self.state.work_min}min complete.\n"
                 f"🤔 Take a minute to reflect…",
-                urgency="critical",
             )
             return
 
@@ -578,12 +604,11 @@ class TimerController:
             phase=self.state.phase,
         )
 
-        notify(
+        self._notify(
             "🍅 Session done!",
             f'"{self.state.task}" — {self.state.work_min}min complete.\n'
             f"☕ {self.state.break_min}min break — "
             f"session {next_sess}/{self.state.total} next.",
-            urgency="critical",
         )
 
     def _transition_break_to_work(self) -> None:
@@ -663,11 +688,10 @@ class TimerController:
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
 
-        notify(
+        self._notify(
             "🍅 Break over!",
             f"Starting session {self.state.current}/{self.state.total} — "
             f"{self.state.work_min}min focus.",
-            urgency="critical",
         )
 
     # ── Phase transitions (full: side effects + timer management) ────────────
@@ -731,10 +755,9 @@ class TimerController:
             total=self.state.total,
         )
 
-        notify(
+        self._notify(
             "🍅 Time's up!",
             f'"{self.state.task}" — {self.state.total} session(s) complete!',
-            urgency="critical",
         )
         if self._on_session_complete:
             self._on_session_complete(

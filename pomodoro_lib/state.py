@@ -28,6 +28,7 @@ class PomodoroState:
     arc_switches: list = field(
         default_factory=list
     )  # [[at_pomodoro, dir_path], ...] — sequential ARC audio switches
+    notify_color: str = "default"  # see NOTIFY_COLORS in config.py
 
     @property
     def is_active(self) -> bool:
