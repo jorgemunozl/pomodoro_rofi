@@ -139,22 +139,35 @@ class StartupPreset:
     start_dir: str  # initial ARC directory or video path
     silence_secs: int  # silence between ARC tracks
     description: str  # one-line summary for the terminal
-    commands: dict[str, list[str]] | None = None  # per-preset event commands
+    commands: dict[str, list] | None = (
+        None  # per-preset event commands (str or [cmd, idx])
+    )
     notify_color: str = "default"  # see NOTIFY_COLORS for available names
 
 
 # ── Event-driven commands ────────────────────────────────────────────────────
-# Each event maps to a list of shell commands.  {variable} substitution is
-# supported: {task}, {work_min}, {session}, {total}, etc.
+# Each event maps to a list of entries.  An entry is either:
+#
+#   * A plain **string** — fires every time the event occurs.
+#   * A **list [command, index]** — fires only when `session` equals *index*
+#     (0-based: 0 = first pomodoro, 1 = second, …).
 #
 # Available events (from pomodoro_lib.commands):
 #   session_start, pomodoro_done, break_done, session_complete
 #   bell_30, bell_begin, bell_end
 #
+# Context variables available for {variable} substitution:
+#   task, work_min, break_min, session, total, phase, video
+#
 # Example:
 #   EVENT_COMMANDS = {
 #       "pomodoro_done": [
 #           'notify-send "Pomodoro {session}/{total} done!"',
+#           ["echo 'first pomodoro!' >> /tmp/pomo.log", 0],  # session 0 only
+#           ["notify-send '⚡ Halfway!'", 2],                 # session 2 only
+#       ],
+#       "break_done": [
+#           ["notify-send '☕ Break after first pomo'", 0],   # break after session 0
 #       ],
 #       "session_complete": [
 #           'mpv --no-terminal --no-video ~/sounds/cheer.mp3',
@@ -176,7 +189,7 @@ so it fires for ALL sessions and presets. Set to ``False`` to disable.
 # EVENT_COMMANDS is the global command registry.  It's merged with each
 # preset's own ``commands`` field at runtime so both layers fire.
 
-_EVENT_COMMANDS: dict[str, list[str]] = {}
+_EVENT_COMMANDS: dict[str, list] = {}
 
 if ANNOUNCE_TIME_ON_DONE:
     _EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
@@ -185,7 +198,7 @@ if ANNOUNCE_TIME_ON_DONE:
         "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
     )
 
-EVENT_COMMANDS: dict[str, list[str]] = _EVENT_COMMANDS
+EVENT_COMMANDS: dict[str, list] = _EVENT_COMMANDS
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {

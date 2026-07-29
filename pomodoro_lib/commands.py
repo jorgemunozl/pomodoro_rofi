@@ -3,7 +3,31 @@
 Usage
 -----
     runner = CommandRunner(EVENT_COMMANDS)
-    runner.run(EVENT_POMODORO_DONE, task="read", work_min=25, session=1, total=4)
+    runner.run(EVENT_POMODORO_DONE, task="read", work_min=25, session=0, total=4)
+
+Each event maps to a **list of entries**.  An entry is either:
+
+* A plain **string** — fires **every time** the event occurs.
+
+  .. code:: python
+
+      "pomodoro_done": [
+          "notify-send '🍅 Pomodoro {session}/{total} done!'",
+      ],
+
+* A **list ``[command, index]``** — fires **only when ``session`` equals *index***
+  (0-based, so ``0`` = first pomodoro, ``1`` = second, …).
+
+  .. code:: python
+
+      "pomodoro_done": [
+          "notify-send '🍅 Another one!'",           # every time
+          ["echo 'first!' >> /tmp/pomo.log", 0],     # only session 0
+          ["notify-send '⚡ Halfway!'", 2],           # only session 2
+      ],
+
+Indexed entries are ignored if the event doesn't provide a ``session``
+context variable.
 """
 
 import logging
@@ -21,27 +45,22 @@ EVENT_BELL_30 = "bell_30"  # 30 seconds remaining in work
 EVENT_BELL_BEGIN = "bell_begin"  # 3 seconds remaining in work
 EVENT_BELL_END = "bell_end"  # Work period fully ended
 
+# ── Types ──────────────────────────────────────────────────────────────────────
+# A command entry is either a plain string (fire always) or [str, int] (fire only
+# when session context matches the index).
+
+CommandEntry = str | list  # [cmd_str, session_index]
+CommandMap = dict[str, list[CommandEntry]]
+
 
 class CommandRunner:
     """Runs shell commands when pomodoro lifecycle events occur.
 
-    The event→commands mapping is provided as a dict::
-
-        {
-            EVENT_POMODORO_DONE: [
-                "notify-send '🍅 Pomodoro {session}/{total} done!'",
-            ],
-            EVENT_SESSION_COMPLETE: [
-                "mpv --no-terminal --no-video ~/sounds/cheer.mp3",
-            ],
-        }
-
-    Commands support ``{variable}`` substitution with context keys passed
-    to :meth:`run` (e.g. ``task``, ``work_min``, ``session``, ``total`` …).
+    See module docstring for the entry format.
     """
 
-    def __init__(self, commands: dict[str, list[str]] | None = None) -> None:
-        self._commands: dict[str, list[str]] = commands or {}
+    def __init__(self, commands: CommandMap | None = None) -> None:
+        self._commands: CommandMap = commands or {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -50,11 +69,11 @@ class CommandRunner:
 
         Silently ignores unknown events (no-op).
         """
-        cmds = self._commands.get(event)
-        if not cmds:
+        entries = self._commands.get(event)
+        if not entries:
             return
-        for raw_cmd in cmds:
-            self._execute(raw_cmd, context)
+        for entry in entries:
+            self._execute(entry, context)
 
     # ── Config access ──────────────────────────────────────────────────────────
 
@@ -68,19 +87,19 @@ class CommandRunner:
         return bool(self._commands.get(event))
 
     @classmethod
-    def merge(cls, *sources: dict[str, list[str]] | None) -> "CommandRunner":
+    def merge(cls, *sources: CommandMap | None) -> "CommandRunner":
         """Create a runner that chains commands from multiple dicts.
 
-        Later sources override (are appended after) earlier ones, so
-        multiple commands can fire for the same event.
+        Later sources are appended after earlier ones, so multiple
+        commands can fire for the same event.
         """
-        merged: dict[str, list[str]] = {}
+        merged: CommandMap = {}
         for src in sources:
             if not src:
                 continue
-            for event, cmds in src.items():
+            for event, entries in src.items():
                 merged.setdefault(event, []).extend(
-                    cmd for cmd in cmds if cmd not in merged.get(event, [])
+                    e for e in entries if e not in merged.get(event, [])
                 )
         return cls(merged)
 
@@ -97,11 +116,26 @@ class CommandRunner:
         except KeyError:
             return raw  # leave unfilled placeholders as-is
 
-    def _execute(self, raw_cmd: str, context: dict[str, object]) -> None:
-        """Run a single formatted command in a subprocess (fire & forget)."""
-        cmd = self._format(raw_cmd, context)
-        if not cmd.strip():
+    def _execute(self, entry: CommandEntry, context: dict[str, object]) -> None:
+        """Run a single command entry, respecting session-index filtering."""
+        # Unpack: plain string → always run,  [str, int] → match session index
+        if isinstance(entry, list):
+            try:
+                cmd_str, target_idx = entry[0], entry[1]
+            except (IndexError, TypeError):
+                return  # malformed entry, skip
+            if not isinstance(target_idx, int):
+                return  # not an indexed command, skip
+            session = context.get("session")
+            if not isinstance(session, int) or session != target_idx:
+                return  # session doesn't match → skip
+        else:
+            cmd_str = str(entry)
+
+        if not cmd_str.strip():
             return
+
+        cmd = self._format(cmd_str, context)
         try:
             subprocess.Popen(
                 cmd,

@@ -666,7 +666,7 @@ class TimerController:
             task=self.state.task,
             work_min=self.state.work_min,
             break_min=self.state.break_min,
-            session=self.state.current,
+            session=self.state.current - 2,
             total=self.state.total,
             phase=self.state.phase,
         )
