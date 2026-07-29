@@ -5,6 +5,12 @@ import sys
 import time
 from pathlib import Path
 
+from pomodoro_lib.commands import (
+    EVENT_BELL_30,
+    EVENT_BELL_BEGIN,
+    EVENT_BELL_END,
+    CommandRunner,
+)
 from pomodoro_lib.config import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
@@ -19,6 +25,7 @@ from pomodoro_lib.config import (
     CUSTOM_LABEL,
     DEFAULT_TASKS,
     DURATION_PRESETS,
+    EVENT_COMMANDS,
     HISTORY_FILE,
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
@@ -42,6 +49,9 @@ from pomodoro_lib.rofi import (
 from pomodoro_lib.state import PomodoroState
 from pomodoro_lib.tasks import TaskManager
 from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_bell
+
+# ── Shared command runner (wired from EVENT_COMMANDS) ────────────────────────
+_cmd_runner = CommandRunner(EVENT_COMMANDS)
 
 # ── Polybar status line ───────────────────────────────────────────────────────
 
@@ -82,7 +92,7 @@ def _status_line() -> str:
     # Handle any expired phases BEFORE computing the status line.
     # This is the *reliable* transition mechanism – the daemon timer
     # threads started by the UI are only a best-effort optimisation.
-    ctrl = TimerController()
+    ctrl = TimerController(cmd_runner=_cmd_runner)
     ctrl.handle_expired()
 
     # Re-check after transition (e.g. the session may have completed)
@@ -133,12 +143,24 @@ def _status_line() -> str:
             try:
                 BELL_30_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_30_FILE)
+                _cmd_runner.run(
+                    EVENT_BELL_30,
+                    task=state.task,
+                    session=state.current,
+                    total=state.total,
+                )
             except FileExistsError:
                 pass
         if rem <= 3 and not BELL_BEGIN_PLAYED.exists():
             try:
                 BELL_BEGIN_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_BEGIN_FILE)
+                _cmd_runner.run(
+                    EVENT_BELL_BEGIN,
+                    task=state.task,
+                    session=state.current,
+                    total=state.total,
+                )
             except FileExistsError:
                 pass
 
@@ -153,6 +175,12 @@ def _status_line() -> str:
             try:
                 WORK_BELL_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_END_FILE)
+                _cmd_runner.run(
+                    EVENT_BELL_END,
+                    task=state.task,
+                    session=state.current,
+                    total=state.total,
+                )
             except FileExistsError:
                 pass  # another process already played it
 
@@ -1606,8 +1634,14 @@ def _handle_startup_preset(name: str) -> None:
     tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
     tm.init_defaults(DEFAULT_TASKS)
 
+    # Merge global EVENT_COMMANDS with the preset's own commands
+    preset_runner = CommandRunner.merge(
+        EVENT_COMMANDS, getattr(preset, "commands", None)
+    )
+
     ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
+        cmd_runner=preset_runner,
     )
 
     first_work, first_break = preset.schedule[0]
@@ -1655,7 +1689,7 @@ def _handle_startup_preset(name: str) -> None:
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
-    ctrl = TimerController()
+    ctrl = TimerController(cmd_runner=_cmd_runner)
 
     if cmd == "status":
         print(_status_line())
@@ -1686,7 +1720,8 @@ def _run_ui() -> None:
     tm.init_defaults(DEFAULT_TASKS)
 
     ctrl = TimerController(
-        on_session_complete=lambda task, w, t: tm.log(task, f"{w}m × {t}")
+        on_session_complete=lambda task, w, t: tm.log(task, f"{w}m × {t}"),
+        cmd_runner=_cmd_runner,
     )
 
     while True:

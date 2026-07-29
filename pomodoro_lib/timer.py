@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from pomodoro_lib.commands import CommandRunner
 from pomodoro_lib.config import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
@@ -131,15 +132,35 @@ def i3_workspace() -> None:
     )
 
 
-def mpv_cmd(json_cmd: str) -> None:
-    """Send a command to the MPV IPC socket."""
-    if MPV_SOCKET.exists():
-        subprocess.run(
+def mpv_cmd(json_cmd: str) -> bool:
+    """Send a command to the MPV IPC socket.
+
+    Returns True if the command was sent successfully, False if the
+    socket was stale or the mpv process is no longer alive.
+    """
+    if not MPV_SOCKET.exists():
+        return False
+    # Always ensure the command ends with a newline (mpv requires it)
+    if not json_cmd.endswith("\n"):
+        json_cmd += "\n"
+    try:
+        result = subprocess.run(
             ["socat", "-", str(MPV_SOCKET)],
             input=json_cmd,
             capture_output=True,
             text=True,
+            timeout=2,
         )
+    except subprocess.TimeoutExpired:
+        return False
+    except FileNotFoundError:
+        # socat not installed
+        return False
+    if result.returncode != 0:
+        # Stale socket — clean it up so callers don't keep trying
+        MPV_SOCKET.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def fade_arc_volume(remaining_secs: int, fade_window: int = 15) -> None:
@@ -243,12 +264,15 @@ class TimerController:
     """Manages background timer thread for work/break cycles."""
 
     def __init__(
-        self, on_session_complete: Callable[[str, int, int], None] | None = None
+        self,
+        on_session_complete: Callable[[str, int, int], None] | None = None,
+        cmd_runner: CommandRunner | None = None,
     ):
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self.state = PomodoroState()
         self._on_session_complete = on_session_complete
+        self._cmd_runner = cmd_runner or CommandRunner()
 
     # ── State persistence ─────────────────────────────────────────────────────
     def load_state(self) -> bool:
@@ -312,6 +336,15 @@ class TimerController:
         )
         self.save_state()
         start_mpv(video, audio_only, arc_mode, silence_secs)
+        self._cmd_runner.run(
+            "session_start",
+            task=task,
+            work_min=work_min,
+            break_min=break_min,
+            total=total,
+            session=1,
+            video=video,
+        )
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         notify(
             "🍅 Pomodoro started",
@@ -531,8 +564,19 @@ class TimerController:
 
         # Pause video/audio during breaks for ARC mode and INCLUDE_DURATION_FILES
         if self._pause_on_break():
-            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+            mpv_cmd('{"command": ["set_property", "pause", true]}')
         WORK_BELL_PLAYED.unlink(missing_ok=True)
+
+        # Fire event AFTER state is saved so commands see the updated phase
+        self._cmd_runner.run(
+            "pomodoro_done",
+            task=self.state.task,
+            work_min=self.state.work_min,
+            break_min=self.state.break_min,
+            session=self.state.current - 1,
+            total=self.state.total,
+            phase=self.state.phase,
+        )
 
         notify(
             "🍅 Session done!",
@@ -591,11 +635,30 @@ class TimerController:
 
         self.save_state()
 
+        # Fire event AFTER state is saved so commands see the updated phase
+        self._cmd_runner.run(
+            "break_done",
+            task=self.state.task,
+            work_min=self.state.work_min,
+            break_min=self.state.break_min,
+            session=self.state.current,
+            total=self.state.total,
+            phase=self.state.phase,
+        )
+
         # Restore volume (ARC fade) and unpause for the next work phase
         if self.state.arc_mode:
-            mpv_cmd('{"command": ["set_property", "volume", 100]}\n')
+            mpv_cmd('{"command": ["set_property", "volume", 100]}')
         if self._pause_on_break():
-            mpv_cmd('{"command": ["set_property", "pause", false]}\n')
+            mpv_cmd('{"command": ["set_property", "pause", false]}')
+        # If the socket was stale (mpv died), restart it
+        if not MPV_SOCKET.exists() and STATE_FILE.exists():
+            state = PomodoroState.load(STATE_FILE)
+            start_mpv(
+                state.video,
+                audio_only=state.audio_only,
+                arc_mode=state.arc_mode,
+            )
         # Clean up bell flags from the just-ended break
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
@@ -659,6 +722,15 @@ class TimerController:
         if not self.state.is_active:
             return
         play_finish_sound()
+
+        # Fire event before session-complete callback but before clearing state
+        self._cmd_runner.run(
+            "session_complete",
+            task=self.state.task,
+            work_min=self.state.work_min,
+            total=self.state.total,
+        )
+
         notify(
             "🍅 Time's up!",
             f'"{self.state.task}" — {self.state.total} session(s) complete!',

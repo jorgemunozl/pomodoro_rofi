@@ -33,6 +33,14 @@ REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 
+# COMMANDS
+open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:📚" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
+open_personal = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_github = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_hugg = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
 TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
@@ -120,6 +128,52 @@ class StartupPreset:
     start_dir: str  # initial ARC directory or video path
     silence_secs: int  # silence between ARC tracks
     description: str  # one-line summary for the terminal
+    commands: dict[str, list[str]] | None = None  # per-preset event commands
+
+
+# ── Event-driven commands ────────────────────────────────────────────────────
+# Each event maps to a list of shell commands.  {variable} substitution is
+# supported: {task}, {work_min}, {session}, {total}, etc.
+#
+# Available events (from pomodoro_lib.commands):
+#   session_start, pomodoro_done, break_done, session_complete
+#   bell_30, bell_begin, bell_end
+#
+# Example:
+#   EVENT_COMMANDS = {
+#       "pomodoro_done": [
+#           'notify-send "Pomodoro {session}/{total} done!"',
+#       ],
+#       "session_complete": [
+#           'mpv --no-terminal --no-video ~/sounds/cheer.mp3',
+#       ],
+#   }
+
+# ── Flags ─────────────────────────────────────────────────────────────────────
+# Toggle these to enable/disable common behaviours without editing every preset.
+
+ANNOUNCE_TIME_ON_DONE: bool = True
+"""When True, speaks the current time via gtts-cli after every pomodoro.
+
+This is injected into the global EVENT_COMMANDS under ``pomodoro_done``,
+so it fires for ALL sessions and presets. Set to ``False`` to disable.
+"""
+
+
+# ── Build EVENT_COMMANDS ──────────────────────────────────────────────────────
+# EVENT_COMMANDS is the global command registry.  It's merged with each
+# preset's own ``commands`` field at runtime so both layers fire.
+
+_EVENT_COMMANDS: dict[str, list[str]] = {}
+
+if ANNOUNCE_TIME_ON_DONE:
+    _EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
+        'gtts-cli "The time is $(date "+%I:%M %p")" '
+        "--output /tmp/say_time.mp3 "
+        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
+    )
+
+EVENT_COMMANDS: dict[str, list[str]] = _EVENT_COMMANDS
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
@@ -169,7 +223,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         schedule=[[20, 4], [20, 0]],
         labels=["polymath", "set-up", "applications"],
         switches=[],
-        # start_dir=str(PAST_ARC_FILE),
+        # start_dir=str(PAST_ARC_FILE), # 16 min planning is tg
         start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon",
@@ -181,6 +235,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             [10, 1],
             [10, 0],
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
+        # Open and focus vault properly
         labels=[
             "polymath",
             "set-up",
@@ -195,5 +250,30 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
         description="morning winter ritual",
+    ),
+    "startup7": StartupPreset(
+        schedule=[[15, 1], [15, 1]],
+        labels=["problem solving", "review", "problem solving", "review"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="afternoon of problem solving from four to six",
+    ),
+    "test": StartupPreset(
+        schedule=[[0.1, 0.1], [1, 0.1]],
+        labels=["test", "test", "test", "test"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=0,
+        description="",
+        commands={
+            "session_start": [
+                'notify-send "🎬 Test preset started — {task}"',
+            ],
+            "session_complete": [
+                'notify-send -u critical "🧪 Test complete! All {total} pomodoros"',
+                'echo "session complete for {task} at $(date)" >> /tmp/test_pomo.log',
+            ],
+        },
     ),
 }
