@@ -1660,6 +1660,8 @@ def _handle_startup_preset(name: str) -> None:
         arc_mode=True,
         silence_secs=preset.silence_secs,
         notify_color=preset.notify_color,
+        notify_title=preset.notify_title,
+        notify_desc=preset.notify_desc,
     )
 
     # Configure audio switches if any

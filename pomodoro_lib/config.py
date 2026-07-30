@@ -39,6 +39,7 @@ open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no
 open_github = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
 open_hugg = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://huggingface.co/jorgemunozl"'
 open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
+cleaning = "imv -f ~/Videos/clean.jpg"
 
 STATE_FILE = Path("/tmp/pomo_state.json")
 PID_FILE = Path("/tmp/pomo_mpv.pid")
@@ -143,6 +144,8 @@ class StartupPreset:
         None  # per-preset event commands (str or [cmd, idx])
     )
     notify_color: str = "default"  # see NOTIFY_COLORS for available names
+    notify_title: str = ""  # dunst summary template, "{summary}" substituted
+    notify_desc: str = ""  # dunst body template, "{body}" substituted
 
 
 # ── Event-driven commands ────────────────────────────────────────────────────
@@ -229,7 +232,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         silence_secs=ARC_STARTUP,
         description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  25/5  🎶 PAST_ARC  →  2× 25/5  🎶 MUSIC",
     ),
-    "startup4": StartupPreset(
+    "night_hardcore": StartupPreset(
         schedule=[
             [15, 2],
             [15, 1],
@@ -242,19 +245,29 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         switches=[[3, str(POMO_DIR / "christmas_2025-I.webm"), False]],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_STARTUP,
-        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  christmas_2025-I.webm  used on the night",
+        notify_color="blue",
+        description="night hardcore",
     ),
-    "startup5": StartupPreset(
+    "night_light": StartupPreset(
+        schedule=[[25, 5], [25, 5], [25, 5], [25, 1]],
+        labels=["polymath or applications", ""],
+        switches=[],
+        start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="night good one",
+        notify_color="blue",
+    ),
+    "noon": StartupPreset(
         schedule=[[20, 4], [20, 0]],
         labels=["polymath", "set-up", "applications"],
         switches=[],
         # start_dir=str(PAST_ARC_FILE),
         start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="noon",
+        description="noon after eat/nap",
         notify_color="blue",
     ),
-    "startup6": StartupPreset(
+    "morning": StartupPreset(
         schedule=[
             [18, 3],
             [17, 1],
@@ -276,8 +289,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         silence_secs=ARC_SILENCE_SECONDS,
         description="morning winter ritual",
         notify_color="yellow",
+        commands={
+            "pomodoro_start": ["open zk"],
+            "pomodoro_done": [["open personal", 1]],
+            "bell_end": [["open "]],
+        },
     ),
-    "startup7": StartupPreset(
+    "afternoon": StartupPreset(
         schedule=[[29, 1], [29, 1]],
         labels=["problem solving", "review", "problem solving", "review"],
         switches=[],
@@ -286,20 +304,28 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[0.1, 0.1], [1, 0.1]],
+        schedule=[[30, 0], [0.1, 0.1], [0.1, 0.1]],
         labels=["test", "test", "test", "test"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=0,
         description="",
         commands={
-            "session_start": [
-                'notify-send "🎬 Test preset started — {task}"',
+            "session_start": [[open_zk, 0], [open_personal, 1], [open_chess, 2]],
+            "pomodoro_done": [
+                [open_terminal_riced, 1],
             ],
-            "session_complete": [
-                'notify-send -u critical "🧪 Test complete! All {total} pomodoros"',
-                'echo "session complete for {task} at $(date)" >> /tmp/test_pomo.log',
-            ],
+        },
+    ),
+    "cleaning": StartupPreset(
+        schedule=[[25, 0]],
+        labels=["cleaning, washing"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=20,
+        description="cleaning",
+        commands={
+            "session_start": [cleaning],
         },
     ),
 }

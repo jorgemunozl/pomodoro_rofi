@@ -338,6 +338,8 @@ class TimerController:
         arc_mode: bool = False,
         silence_secs: int = ARC_SILENCE_SECONDS,
         notify_color: str = "default",
+        notify_title: str = "",
+        notify_desc: str = "",
     ) -> None:
         self.stop()
         total_first_secs = warm_up_secs + work_min * 60
