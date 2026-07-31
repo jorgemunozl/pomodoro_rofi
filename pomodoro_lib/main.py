@@ -34,6 +34,7 @@ from pomodoro_lib.config import (
     PAUSE_TS,
     POMO_DIR,
     POMODORO_DEFAULTS,
+    SKIP_RANDOM_FILE,
     STARTUP_PRESETS,
     STATE_FILE,
     TASKS_FILE,
@@ -1720,6 +1721,101 @@ def _handle_startup_preset(name: str) -> None:
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
 
 
+def _handle_random() -> None:
+    """Play through all available videos randomly, one pomodoro each.
+
+    Detaches into the background.  Run ``pomodoro skip_random`` to skip
+    to the next video, or ``pomodoro stop`` to quit."""
+    import random
+    import os
+
+    # ── Fork to background ─────────────────────────────────────────────────
+    pid = os.fork()
+    if pid > 0:
+        print(f"🎲 Random pomodoro started (PID {pid})")
+        print(f"   pomodoro skip_random  →  skip to next video")
+        print(f"   pomodoro stop         →  stop completely")
+        return  # parent exits, terminal is free
+
+    os.setsid()  # detach from terminal
+
+    # Redirect output to /dev/null (no terminal attached)
+    devnull = os.open(os.devnull, os.O_RDWR)
+    os.dup2(devnull, sys.stdin.fileno())
+    os.dup2(devnull, sys.stdout.fileno())
+    os.dup2(devnull, sys.stderr.fileno())
+    os.close(devnull)
+
+    # ── Main loop ──────────────────────────────────────────────────────────
+
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    videos = _list_videos()
+    if not videos:
+        print(f"Error: No video files found in {POMO_DIR}", file=sys.stderr)
+        sys.exit(1)
+
+    random.shuffle(videos)
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    SKIP_RANDOM_FILE.unlink(missing_ok=True)  # clean from previous runs
+
+    for v in videos:
+        rhythm_data = _lookup_default_rhythm(v.name)
+        if rhythm_data is None:
+            work_min, break_min, total, warm_up_secs, schedule = 25, 5, 1, 0, None
+        else:
+            work_min, break_min, total, warm_up_secs, schedule = rhythm_data
+
+        print(f"\n🎲 {v.name}  —  {work_min}min × {total}  (pomodoro skip_random to skip)", flush=True)
+
+        ctrl = TimerController(
+            on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
+            cmd_runner=_cmd_runner,
+        )
+
+        ctrl.start(
+            task="random",
+            video=str(v),
+            work_min=work_min,
+            break_min=break_min,
+            total=total,
+            warm_up_secs=warm_up_secs,
+            schedule=schedule or None,
+        )
+
+        # Poll until session ends or skip_random is run
+        try:
+            while STATE_FILE.exists():
+                ctrl.handle_expired()
+                line = _status_line()
+                if not line:
+                    break
+                print(f"\r{line}  ", end="", flush=True)
+
+                if SKIP_RANDOM_FILE.exists():
+                    SKIP_RANDOM_FILE.unlink()
+                    print("\n⏭ Skipping…")
+                    ctrl.clear_state()
+                    break
+
+                time.sleep(0.9)
+        except KeyboardInterrupt:
+            print("\nInterrupted.")
+            ctrl.clear_state()
+            sys.exit(0)
+
+    notify("🎲 Random pomodoro", "All videos finished!")
+
+
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
@@ -1735,11 +1831,15 @@ def _run_subcommand(args: list[str]) -> None:
         ctrl.skip_phase()
     elif cmd == "start":
         _handle_start(args[1:])
+    elif cmd == "random":
+        _handle_random()
+    elif cmd == "skip_random":
+        SKIP_RANDOM_FILE.touch()
     elif cmd in STARTUP_PRESETS:
         _handle_startup_preset(cmd)
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|startup|startup2|startup3 [options]}",
+            "usage: pomodoro {status|toggle|stop|next|start|random|startup|startup2|...}",
             file=sys.stderr,
         )
         sys.exit(1)

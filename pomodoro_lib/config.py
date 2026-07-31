@@ -46,6 +46,7 @@ PID_FILE = Path("/tmp/pomo_mpv.pid")
 TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
 PAUSE_FILE = Path("/tmp/pomo_pause")
 PAUSE_TS = Path("/tmp/pomo_pause_ts")
+SKIP_RANDOM_FILE = Path("/tmp/pomo_skip_random")
 BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
 BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
 WORK_BELL_PLAYED = Path("/tmp/pomo_work_bell_played")
@@ -208,6 +209,16 @@ if ANNOUNCE_TIME_ON_DONE:
         "--output /tmp/say_time.mp3 "
         "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
     )
+
+# Push-ups reminder — every 2 pomodoros (≈ each hour)
+_EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
+    [
+        'gtts-cli "10 push ups time!" '
+        "--output /tmp/push_reminder.mp3 "
+        "&& mpv /tmp/push_reminder.mp3 --volume=130 --no-terminal",
+        "every:2",
+    ]
+)
 
 EVENT_COMMANDS: dict[str, list] = _EVENT_COMMANDS
 
