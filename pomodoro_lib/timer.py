@@ -256,19 +256,24 @@ def start_mpv(
 
 
 def kill_mpv() -> None:
-    """Kill the mpv process and clean up.  Waits for the process to actually
-    terminate before returning, so a subsequent start_mpv() won't overlap."""
+    """Kill the mpv process and clean up.  Brief wait for graceful exit."""
     if PID_FILE.exists():
         try:
             pid = int(PID_FILE.read_text().strip())
             os.kill(pid, signal.SIGTERM)
-            # Wait for the process to actually die (up to 2 seconds)
-            for _ in range(40):
+            # Brief wait — up to 0.5s max (10 × 50ms)
+            for _ in range(10):
                 try:
-                    os.kill(pid, 0)  # signal 0 = check if alive
+                    os.kill(pid, 0)
                     time.sleep(0.05)
                 except OSError:
-                    break  # process is gone
+                    break
+            else:
+                # Still alive — force kill
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
         except (ProcessLookupError, ValueError, FileNotFoundError):
             pass
     PID_FILE.unlink(missing_ok=True)
@@ -383,7 +388,7 @@ class TimerController:
             and self._thread.is_alive()
             and self._thread is not threading.current_thread()
         ):
-            self._thread.join(timeout=1.0)
+            self._thread.join(timeout=0.5)
         self._stop_event.clear()
         self._thread = None
         kill_mpv()
@@ -679,6 +684,18 @@ class TimerController:
                 phase="reflect",
                 session=self.state.current - 1,
             )
+
+            # Fire pomodoro_done so indexed commands (push-ups etc.) also run here
+            self._cmd_runner.run(
+                "pomodoro_done",
+                task=self.state.task,
+                work_min=self.state.work_min,
+                break_min=self.state.break_min,
+                session=self.state.current - 1,
+                total=self.state.total,
+                phase=self.state.phase,
+            )
+
             return
 
         next_sess = self.state.current + 1
