@@ -293,37 +293,79 @@ class TimerController:
         self._cmd_runner = cmd_runner or CommandRunner()
 
     def _notify(
-        self, summary: str, body: str = "", urgency: str | None = None, phase: str = ""
+        self,
+        summary: str,
+        body: str = "",
+        urgency: str | None = None,
+        phase: str = "",
+        session: int | None = None,
     ) -> None:
         """Send a notification using the session's notify settings.
 
         *phase* is a key into ``notify_phases`` for per-event overrides
         (``start``, ``pomodoro_done``, ``break_done``, ``reflect``, ``finished``, ``resumed``).
+
+        Each value in ``notify_phases`` is a **list of entries** matching
+        the command-runner style:
+          * A plain **dict** — applies every time.
+          * A **list ``[dict, int]``** — only at that session index.
+          * A **list ``[dict, "every:N"]``** — interval filtering.
+
+        If *session* is None, filtered entries are silently skipped.
         """
         if urgency:
             notify(summary, body, urgency=urgency)
-        else:
-            # Start with global overrides
-            title = self.state.notify_title
-            desc = self.state.notify_desc
-            timeout = self.state.notify_timeout
+            return
 
-            # Merge in per-phase overrides if present
-            phase_overrides = self.state.notify_phases.get(phase, {})
-            title = phase_overrides.get("title", title)
-            desc = phase_overrides.get("desc", desc)
-            timeout = phase_overrides.get("timeout", timeout)
+        # Start with global overrides
+        title = self.state.notify_title
+        desc = self.state.notify_desc
+        timeout = self.state.notify_timeout
 
-            if title:
-                summary = title.replace("{summary}", summary)
-            if desc:
-                body = desc.replace("{body}", body)
-            notify(
-                summary,
-                body,
-                color=self.state.notify_color,
-                timeout=timeout,
-            )
+        # Apply matching per-phase entries (later entries win for conflicts)
+        entries = self.state.notify_phases.get(phase, [])
+        for entry in entries:
+            override: dict | None = None
+
+            if isinstance(entry, list):
+                try:
+                    override, target = entry[0], entry[1]
+                except (IndexError, TypeError):
+                    continue
+                if session is None:
+                    continue  # can't filter, skip
+                if isinstance(target, int):
+                    if session != target:
+                        continue
+                elif isinstance(target, str) and target.startswith("every:"):
+                    try:
+                        interval = int(target.split(":", 1)[1])
+                    except (ValueError, IndexError):
+                        continue
+                    if interval < 1 or session % interval != 0:
+                        continue
+                else:
+                    continue  # unknown filter
+            elif isinstance(entry, dict):
+                override = entry
+            else:
+                continue
+
+            if override is not None:
+                title = override.get("title", title)
+                desc = override.get("desc", desc)
+                timeout = override.get("timeout", timeout)
+
+        if title:
+            summary = title.replace("{summary}", summary)
+        if desc:
+            body = desc.replace("{body}", body)
+        notify(
+            summary,
+            body,
+            color=self.state.notify_color,
+            timeout=timeout,
+        )
 
     # ── State persistence ─────────────────────────────────────────────────────
     def load_state(self) -> bool:
@@ -426,6 +468,7 @@ class TimerController:
             f"{warmup_note}{work_min}min focus — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
             phase="start",
+            session=0,
         )
 
         # Defensive clear to prevent race conditions
@@ -497,6 +540,7 @@ class TimerController:
             f"{secs_left // 60}m left — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
             phase="resumed",
+            session=self.state.current - 1,
         )
 
         # Ensure a clean stop event before running the new timer
@@ -633,6 +677,7 @@ class TimerController:
                 f"of {self.state.work_min}min complete.\n"
                 f"🤔 Take a minute to reflect…",
                 phase="reflect",
+                session=self.state.current - 1,
             )
             return
 
@@ -664,6 +709,7 @@ class TimerController:
             f"☕ {self.state.break_min}min break — "
             f"session {next_sess}/{self.state.total} next.",
             phase="pomodoro_done",
+            session=self.state.current - 1,
         )
 
     def _transition_break_to_work(self) -> None:
@@ -759,6 +805,7 @@ class TimerController:
             f"Starting session {self.state.current}/{self.state.total} — "
             f"{self.state.work_min}min focus.",
             phase="break_done",
+            session=self.state.current - 2,
         )
 
     # ── Phase transitions (full: side effects + timer management) ────────────
@@ -835,6 +882,7 @@ class TimerController:
             "🍅 Time's up!",
             f'"{self.state.task}" — {self.state.total} session(s) complete!',
             phase="finished",
+            session=self.state.total - 1,
         )
         if self._on_session_complete:
             self._on_session_complete(

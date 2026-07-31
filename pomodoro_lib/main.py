@@ -1661,10 +1661,8 @@ def _handle_startup_preset(name: str) -> None:
         warm_up_secs = 0
     elif is_file:
         arc_mode = False
-        audio_only = True
+        audio_only = False
         silence_secs = ARC_SILENCE_SECONDS
-        # Generate mp3 if needed (for audio-only playback)
-        _ensure_mp3(start_path)
         # Look up warm-up from video presets
         rhythm_data = _lookup_default_rhythm(start_path.name)
         if rhythm_data is not None:

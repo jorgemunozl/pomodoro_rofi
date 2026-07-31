@@ -36,6 +36,8 @@ PAST_ARC_FILE = Path.home() / "Videos" / "music"
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
 open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/member/jorgemunozl"'
+open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
+open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 cleaning = "imv -f ~/Videos/clean.jpg"
 
@@ -256,7 +258,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "night_light": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 1]],
-        labels=["polymath or applications", ""],
+        labels=["polymath / applications", "wash teeth", "pomodoro", "prepare for tomorrow", "pomodoro", "prepare for tomorrow", "pomodoro", "grab a book to read"],
         switches=[],
         start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
         silence_secs=ARC_SILENCE_SECONDS,
@@ -264,14 +266,24 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
     ),
     "noon": StartupPreset(
-        schedule=[[20, 4], [20, 0]],
-        labels=["polymath", "set-up", "applications"],
+        schedule=[[15, 3], [15, 1], [10, 1], [10, 0]],
+        labels=["polymath", "set-up", "applications", "time","github issue","time", "fix code"],
         switches=[],
         # start_dir=str(PAST_ARC_FILE),
         start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon after eat/nap",
         notify_color="blue",
+        commands={
+            "session_start": [
+                open_zk
+            ],  # only once, at the very beginning (plain string)
+            "pomodoro_done": [
+                [open_personal, 1],  # after 1st pomodoro
+                [open_git, 2],  # after 3rd pomodoro
+                [open_zed, 3],  # after 4th pomodoro
+            ],
+        },
     ),
     "morning": StartupPreset(
         schedule=[
@@ -317,12 +329,26 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[0.1, 0.1], [0.1, 0.1]],
+        schedule=[[0.2, 0.2], [0.2, 0.2], [0.2, 0.2]],
         labels=["test"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=0,
-        description="",
+        notify_color="green",
+        notify_desc="eso tilin",
+        notify_title="a la mrd",
+        description="asd",
+        notify_phases={
+            # Same style as commands: plain dict → always, [dict, int] → indexed
+            "pomodoro_done": [
+                {"title": "✅ wow tilin", "timeout": 4000},
+                [{"desc": "{body}\neso tilin"}, 0],
+                [{"desc": "{body}\nal la mrd", "timeout": 12000}, 1],
+            ],
+            "break_done": [
+                [{"title": "⏰ no tilin"}, 0],
+            ],
+        },
     ),
     "cleaning": StartupPreset(
         schedule=[[25, 0]],
