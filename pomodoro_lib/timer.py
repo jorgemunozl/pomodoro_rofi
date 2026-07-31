@@ -17,6 +17,7 @@ from pomodoro_lib.config import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     FINISH_FILE,
+    FINISH_PLAYED,
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
     NOTIFY_COLORS,
@@ -124,19 +125,22 @@ def notify(
     body: str = "",
     urgency: str = "normal",
     color: str | None = None,
+    timeout: int = 0,
 ) -> None:
     """Send a dunst notification.
 
     *urgency* is a direct dunst urgency level (low|normal|critical).
     *color* is a named color (default|red|yellow|blue|…) from NOTIFY_COLORS.
-    If both are given, *color* wins.
+    *timeout* is milliseconds (0 = dunst default).
+    If both urgency and color are given, *color* wins.
     """
     if color:
         urgency = NOTIFY_COLORS.get(color, urgency)
-    subprocess.run(
-        ["dunstify", "-u", urgency, summary, body],
-        capture_output=True,
-    )
+    cmd = ["dunstify", "-u", urgency]
+    if timeout:
+        cmd += ["-t", str(timeout)]
+    cmd += [summary, body]
+    subprocess.run(cmd, capture_output=True)
 
 
 def i3_workspace() -> None:
@@ -288,12 +292,38 @@ class TimerController:
         self._on_session_complete = on_session_complete
         self._cmd_runner = cmd_runner or CommandRunner()
 
-    def _notify(self, summary: str, body: str = "", urgency: str | None = None) -> None:
-        """Send a notification using the session's notify_color by default."""
+    def _notify(
+        self, summary: str, body: str = "", urgency: str | None = None, phase: str = ""
+    ) -> None:
+        """Send a notification using the session's notify settings.
+
+        *phase* is a key into ``notify_phases`` for per-event overrides
+        (``start``, ``pomodoro_done``, ``break_done``, ``reflect``, ``finished``, ``resumed``).
+        """
         if urgency:
             notify(summary, body, urgency=urgency)
         else:
-            notify(summary, body, color=self.state.notify_color)
+            # Start with global overrides
+            title = self.state.notify_title
+            desc = self.state.notify_desc
+            timeout = self.state.notify_timeout
+
+            # Merge in per-phase overrides if present
+            phase_overrides = self.state.notify_phases.get(phase, {})
+            title = phase_overrides.get("title", title)
+            desc = phase_overrides.get("desc", desc)
+            timeout = phase_overrides.get("timeout", timeout)
+
+            if title:
+                summary = title.replace("{summary}", summary)
+            if desc:
+                body = desc.replace("{body}", body)
+            notify(
+                summary,
+                body,
+                color=self.state.notify_color,
+                timeout=timeout,
+            )
 
     # ── State persistence ─────────────────────────────────────────────────────
     def load_state(self) -> bool:
@@ -321,6 +351,7 @@ class TimerController:
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
         WORK_BELL_PLAYED.unlink(missing_ok=True)
+        FINISH_PLAYED.unlink(missing_ok=True)
         self.state = PomodoroState()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -340,8 +371,12 @@ class TimerController:
         notify_color: str = "default",
         notify_title: str = "",
         notify_desc: str = "",
+        notify_timeout: int = 0,
+        notify_phases: dict | None = None,
     ) -> None:
         self.stop()
+        # Fresh start: clear the finish guard from any previous session
+        FINISH_PLAYED.unlink(missing_ok=True)
         total_first_secs = warm_up_secs + work_min * 60
         self.state = PomodoroState(
             task=task,
@@ -358,6 +393,10 @@ class TimerController:
             audio_only=audio_only,
             arc_mode=arc_mode,
             notify_color=notify_color,
+            notify_title=notify_title,
+            notify_desc=notify_desc,
+            notify_timeout=notify_timeout,
+            notify_phases=notify_phases or {},
         )
         self.save_state()
         start_mpv(video, audio_only, arc_mode, silence_secs)
@@ -367,7 +406,17 @@ class TimerController:
             work_min=work_min,
             break_min=break_min,
             total=total,
-            session=1,
+            session=0,
+            video=video,
+        )
+        # First pomodoro begins
+        self._cmd_runner.run(
+            "pomodoro_begin",
+            task=task,
+            work_min=work_min,
+            break_min=break_min,
+            total=total,
+            session=0,
             video=video,
         )
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
@@ -376,6 +425,7 @@ class TimerController:
             f"{task} — session 1/{total}\n"
             f"{warmup_note}{work_min}min focus — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
+            phase="start",
         )
 
         # Defensive clear to prevent race conditions
@@ -446,6 +496,7 @@ class TimerController:
             "🍅 Pomodoro resumed",
             f"{secs_left // 60}m left — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
+            phase="resumed",
         )
 
         # Ensure a clean stop event before running the new timer
@@ -581,6 +632,7 @@ class TimerController:
                 f'"{self.state.task}" — {self.state.total} session(s) '
                 f"of {self.state.work_min}min complete.\n"
                 f"🤔 Take a minute to reflect…",
+                phase="reflect",
             )
             return
 
@@ -611,6 +663,7 @@ class TimerController:
             f'"{self.state.task}" — {self.state.work_min}min complete.\n'
             f"☕ {self.state.break_min}min break — "
             f"session {next_sess}/{self.state.total} next.",
+            phase="pomodoro_done",
         )
 
     def _transition_break_to_work(self) -> None:
@@ -673,6 +726,17 @@ class TimerController:
             phase=self.state.phase,
         )
 
+        # This work phase begins (0-based: current-1)
+        self._cmd_runner.run(
+            "pomodoro_begin",
+            task=self.state.task,
+            work_min=self.state.work_min,
+            break_min=self.state.break_min,
+            total=self.state.total,
+            session=self.state.current - 1,
+            phase=self.state.phase,
+        )
+
         # Restore volume (ARC fade) and unpause for the next work phase
         if self.state.arc_mode:
             mpv_cmd('{"command": ["set_property", "volume", 100]}')
@@ -694,6 +758,7 @@ class TimerController:
             "🍅 Break over!",
             f"Starting session {self.state.current}/{self.state.total} — "
             f"{self.state.work_min}min focus.",
+            phase="break_done",
         )
 
     # ── Phase transitions (full: side effects + timer management) ────────────
@@ -747,6 +812,15 @@ class TimerController:
         self.state = PomodoroState.load(STATE_FILE)
         if not self.state.is_active:
             return
+
+        # Idempotency guard: several callers can race here (daemon timer
+        # thread, startup loop, _status_line, polybar poll). Only the first
+        # plays the finish sound and cleans up.
+        try:
+            FINISH_PLAYED.touch(exist_ok=False)
+        except FileExistsError:
+            return  # another process is already finishing
+
         play_finish_sound()
 
         # Fire event before session-complete callback but before clearing state
@@ -760,6 +834,7 @@ class TimerController:
         self._notify(
             "🍅 Time's up!",
             f'"{self.state.task}" — {self.state.total} session(s) complete!',
+            phase="finished",
         )
         if self._on_session_complete:
             self._on_session_complete(

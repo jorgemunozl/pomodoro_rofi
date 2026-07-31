@@ -26,6 +26,15 @@ Each event maps to a **list of entries**.  An entry is either:
           ["notify-send '⚡ Halfway!'", 2],           # only session 2
       ],
 
+* A **list ``[command, "every:N"]``** — fires **every N sessions** (at
+  ``session`` 0, N, 2N, …). Ideal for recurring breaks like push-ups.
+
+  .. code:: python
+
+      "pomodoro_done": [
+          ["echo '💪 Push ups!' >> /tmp/log", "every:2"],  # every 2 pomos
+      ],
+
 Indexed entries are ignored if the event doesn't provide a ``session``
 context variable.
 """
@@ -38,6 +47,7 @@ from pathlib import Path
 # These are the canonical event names. Users reference them in EVENT_COMMANDS.
 
 EVENT_SESSION_START = "session_start"  # A new work session begins
+EVENT_POMODORO_BEGIN = "pomodoro_begin"  # Each work phase begins
 EVENT_POMODORO_DONE = "pomodoro_done"  # Work → break transition
 EVENT_BREAK_DONE = "break_done"  # Break → work transition
 EVENT_SESSION_COMPLETE = "session_complete"  # All pomodoros finished (reflect done)
@@ -46,10 +56,12 @@ EVENT_BELL_BEGIN = "bell_begin"  # 3 seconds remaining in work
 EVENT_BELL_END = "bell_end"  # Work period fully ended
 
 # ── Types ──────────────────────────────────────────────────────────────────────
-# A command entry is either a plain string (fire always) or [str, int] (fire only
-# when session context matches the index).
+# A command entry is either:
+#   - str             → fire always
+#   - [str, int]      → fire when session == index
+#   - [str, "every:N"] → fire when session % N == 0
 
-CommandEntry = str | list  # [cmd_str, session_index]
+CommandEntry = str | list  # [cmd_str, session_filter]
 CommandMap = dict[str, list[CommandEntry]]
 
 
@@ -118,17 +130,31 @@ class CommandRunner:
 
     def _execute(self, entry: CommandEntry, context: dict[str, object]) -> None:
         """Run a single command entry, respecting session-index filtering."""
-        # Unpack: plain string → always run,  [str, int] → match session index
+        # Unpack: plain string → always run,  [str, int|str] → filtered
         if isinstance(entry, list):
             try:
-                cmd_str, target_idx = entry[0], entry[1]
+                cmd_str, target = entry[0], entry[1]
             except (IndexError, TypeError):
                 return  # malformed entry, skip
-            if not isinstance(target_idx, int):
-                return  # not an indexed command, skip
+
             session = context.get("session")
-            if not isinstance(session, int) or session != target_idx:
-                return  # session doesn't match → skip
+            if not isinstance(session, int):
+                return  # no session context, skip all filtered
+
+            if isinstance(target, int):
+                # Exact index: fire only when session == target
+                if session != target:
+                    return
+            elif isinstance(target, str) and target.startswith("every:"):
+                # Interval: fire when session % N == 0
+                try:
+                    interval = int(target.split(":", 1)[1])
+                except (ValueError, IndexError):
+                    return
+                if interval < 1 or session % interval != 0:
+                    return
+            else:
+                return  # unknown filter type, skip
         else:
             cmd_str = str(entry)
 

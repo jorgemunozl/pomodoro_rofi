@@ -33,11 +33,9 @@ REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 # COMMANDS
-open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣 && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
+open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
 open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/member/jorgemunozl"'
-open_github = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
-open_hugg = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://huggingface.co/jorgemunozl"'
 open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 cleaning = "imv -f ~/Videos/clean.jpg"
 
@@ -49,6 +47,7 @@ PAUSE_TS = Path("/tmp/pomo_pause_ts")
 BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
 BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
 WORK_BELL_PLAYED = Path("/tmp/pomo_work_bell_played")
+FINISH_PLAYED = Path("/tmp/pomo_finish_played")
 MPV_SOCKET = Path("/tmp/mpvsocket")
 
 TASKS_FILE = DATA_DIR / "tasks"
@@ -146,6 +145,10 @@ class StartupPreset:
     notify_color: str = "default"  # see NOTIFY_COLORS for available names
     notify_title: str = ""  # dunst summary template, "{summary}" substituted
     notify_desc: str = ""  # dunst body template, "{body}" substituted
+    notify_timeout: int = 0  # milliseconds (0 = dunst default)
+    notify_phases: dict | None = (
+        None  # per-phase overrides: {"phase": {"title": ..., "desc": ..., "timeout": ...}}
+    )
 
 
 # ── Event-driven commands ────────────────────────────────────────────────────
@@ -154,9 +157,11 @@ class StartupPreset:
 #   * A plain **string** — fires every time the event occurs.
 #   * A **list [command, index]** — fires only when `session` equals *index*
 #     (0-based: 0 = first pomodoro, 1 = second, …).
+#   * A **list [command, "every:N"]** — fires every N sessions
+#     (at session 0, N, 2N, …).  Ideal for recurring breaks like push-ups.
 #
 # Available events (from pomodoro_lib.commands):
-#   session_start, pomodoro_done, break_done, session_complete
+#   session_start, pomodoro_begin, pomodoro_done, break_done, session_complete
 #   bell_30, bell_begin, bell_end
 #
 # Context variables available for {variable} substitution:
@@ -168,6 +173,7 @@ class StartupPreset:
 #           'notify-send "Pomodoro {session}/{total} done!"',
 #           ["echo 'first pomodoro!' >> /tmp/pomo.log", 0],  # session 0 only
 #           ["notify-send '⚡ Halfway!'", 2],                 # session 2 only
+#           ["echo '💪 Push ups!' >> /tmp/pomo.log", "every:2"],  # every 2
 #       ],
 #       "break_done": [
 #           ["notify-send '☕ Break after first pomo'", 0],   # break after session 0
@@ -270,18 +276,18 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     "morning": StartupPreset(
         schedule=[
             [18, 3],
-            [17, 1],
+            [17, 2],
             [10, 1],
-            [10, 0],
+            [5, 4],
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
         labels=[
             "polymath",
             "set-up",
             "applications",
             "vault",
-            "chess",
+            "chess/review",
             "chess review",
-            "quanta magazine",
+            "stretch",
             "plan, plan",
         ],
         switches=[],
@@ -290,10 +296,17 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="morning winter ritual",
         notify_color="yellow",
         commands={
-            "pomodoro_start": ["open zk"],
-            "pomodoro_done": [["open personal", 1]],
-            "bell_end": [["open "]],
-        },
+                    "session_start": [
+                        open_zk
+                    ],  # only once, at the very beginning (plain string)
+                    "pomodoro_done": [
+                        [open_personal, 1],  # after 1st pomodoro
+                        [open_terminal_riced, 2],  # after 3rd pomodoro
+                    ],
+                    "pomodoro_begin": [
+                        [open_chess, 2],  # before 1st pomodoro
+                    ],
+                },
     ),
     "afternoon": StartupPreset(
         schedule=[[29, 1], [29, 1]],
@@ -304,18 +317,12 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[30, 0], [0.1, 0.1], [0.1, 0.1]],
-        labels=["test", "test", "test", "test"],
+        schedule=[[0.1, 0.1], [0.1, 0.1]],
+        labels=["test"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=0,
         description="",
-        commands={
-            "session_start": [[open_zk, 0], [open_personal, 1], [open_chess, 2]],
-            "pomodoro_done": [
-                [open_terminal_riced, 1],
-            ],
-        },
     ),
     "cleaning": StartupPreset(
         schedule=[[25, 0]],

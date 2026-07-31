@@ -31,6 +31,10 @@ class PomodoroState:
     notify_color: str = "default"  # see NOTIFY_COLORS in config.py
     notify_title: str = ""  # template: "{summary}" substituted, empty = no change
     notify_desc: str = ""  # template: "{body}" substituted, empty = no change
+    notify_timeout: int = 0  # milliseconds (0 = dunst default)
+    notify_phases: dict = field(
+        default_factory=dict
+    )  # per-phase overrides keyed by phase name
 
     @property
     def is_active(self) -> bool:

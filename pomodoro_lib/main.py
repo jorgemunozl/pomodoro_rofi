@@ -146,7 +146,7 @@ def _status_line() -> str:
                 _cmd_runner.run(
                     EVENT_BELL_30,
                     task=state.task,
-                    session=state.current,
+                    session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -158,7 +158,7 @@ def _status_line() -> str:
                 _cmd_runner.run(
                     EVENT_BELL_BEGIN,
                     task=state.task,
-                    session=state.current,
+                    session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -178,7 +178,7 @@ def _status_line() -> str:
                 _cmd_runner.run(
                     EVENT_BELL_END,
                     task=state.task,
-                    session=state.current,
+                    session=state.current - 1,  # 0-based: work session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -1647,21 +1647,54 @@ def _handle_startup_preset(name: str) -> None:
     first_work, first_break = preset.schedule[0]
     total = len(preset.schedule)
 
+    # ── Determine start mode from start_dir ────────────────────────────────
+    # Directory → arc_mode (build shuffled playlist from directory contents)
+    # File      → audio_only (play a single video's audio track)
+    start_path = Path(preset.start_dir) if preset.start_dir else None
+    is_arc = start_path and start_path.is_dir()
+    is_file = start_path and start_path.is_file()
+
+    if is_arc:
+        arc_mode = True
+        audio_only = True
+        silence_secs = preset.silence_secs
+        warm_up_secs = 0
+    elif is_file:
+        arc_mode = False
+        audio_only = True
+        silence_secs = ARC_SILENCE_SECONDS
+        # Generate mp3 if needed (for audio-only playback)
+        _ensure_mp3(start_path)
+        # Look up warm-up from video presets
+        rhythm_data = _lookup_default_rhythm(start_path.name)
+        if rhythm_data is not None:
+            *_, warm_up_secs, _ = rhythm_data
+        else:
+            warm_up_secs = 0
+    else:
+        # Empty or invalid — no audio
+        arc_mode = False
+        audio_only = False
+        silence_secs = 0
+        warm_up_secs = 0
+
     ctrl.start(
         task="startup",
         video=preset.start_dir,
         work_min=first_work,
         break_min=first_break,
         total=total,
-        warm_up_secs=0,
+        warm_up_secs=warm_up_secs,
         schedule=preset.schedule,
         schedule_labels=preset.labels,
-        audio_only=True,
-        arc_mode=True,
-        silence_secs=preset.silence_secs,
+        audio_only=audio_only,
+        arc_mode=arc_mode,
+        silence_secs=silence_secs,
         notify_color=preset.notify_color,
         notify_title=preset.notify_title,
         notify_desc=preset.notify_desc,
+        notify_timeout=preset.notify_timeout,
+        notify_phases=preset.notify_phases or {},
     )
 
     # Configure audio switches if any
