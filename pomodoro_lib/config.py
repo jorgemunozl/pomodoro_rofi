@@ -15,12 +15,15 @@ def _find_project_root() -> Path:
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
+SOUNDS_DIR = Path.home() / "Videos" / "sound-effects"
 
-FINISH_FILE = POMO_DIR / "finish.mp3"
+FINISH_FILE = SOUNDS_DIR / "finish.mp3"
 
-BELL_30_FILE = POMO_DIR / "bell_30.mp3"
-BELL_BEGIN_FILE = POMO_DIR / "bell_begin.mp3"
-BELL_END_FILE = POMO_DIR / "bell_end.mp3"
+BELL_30_FILE = SOUNDS_DIR / "bell_30.mp3"
+BELL_BEGIN_FILE = SOUNDS_DIR / "bell_begin.mp3"
+BELL_END_FILE = SOUNDS_DIR / "bell_end.mp3"
+
+PUSH_UPS_FILE = SOUNDS_DIR / "push_ups.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current-arc"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
@@ -209,13 +212,16 @@ if ANNOUNCE_TIME_ON_DONE:
         "--output /tmp/say_time.mp3 "
         "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
     )
+    _EVENT_COMMANDS.setdefault("pomodoro_begin", []).append(
+        'gtts-cli "The time is $(date "+%I:%M %p")" '
+        "--output /tmp/say_time.mp3 "
+        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
+    )
 
 # Push-ups reminder — every 2 pomodoros (≈ each hour)
 _EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
     [
-        'gtts-cli "10 push ups time!" '
-        "--output /tmp/push_reminder.mp3 "
-        "&& mpv /tmp/push_reminder.mp3 --volume=130 --no-terminal",
+        f"mpv {PUSH_UPS_FILE} --volume=130 --no-terminal",
         "every:2",
     ]
 )
