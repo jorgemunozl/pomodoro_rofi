@@ -15,7 +15,7 @@ def _find_project_root() -> Path:
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
-SOUNDS_DIR = Path.home() / "Videos" / "sound-effects"
+SOUNDS_DIR = POMO_DIR / "sound_effects"
 
 FINISH_FILE = SOUNDS_DIR / "finish.mp3"
 
@@ -201,32 +201,28 @@ so it fires for ALL sessions and presets. Set to ``False`` to disable.
 
 
 # ── Build EVENT_COMMANDS ──────────────────────────────────────────────────────
-# EVENT_COMMANDS is the global command registry.  It's merged with each
-# preset's own ``commands`` field at runtime so both layers fire.
+# Uses CommandsBuilder for a clean declarative API.
 
-_EVENT_COMMANDS: dict[str, list] = {}
+from pomodoro_lib.commands import CommandsBuilder
+
+_SAY_TIME = (
+    'gtts-cli "The time is $(date "+%I:%M %p")" '
+    "--output /tmp/say_time.mp3 "
+    "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
+)
+_PUSH_UPS_CMD = f"mpv {PUSH_UPS_FILE} --volume=130 --no-terminal"
+
+cmds = CommandsBuilder()
 
 if ANNOUNCE_TIME_ON_DONE:
-    _EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
-        'gtts-cli "The time is $(date "+%I:%M %p")" '
-        "--output /tmp/say_time.mp3 "
-        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
-    )
-    _EVENT_COMMANDS.setdefault("pomodoro_begin", []).append(
-        'gtts-cli "The time is $(date "+%I:%M %p")" '
-        "--output /tmp/say_time.mp3 "
-        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
-    )
+    cmds.on("pomodoro_done").always(_SAY_TIME)
+    cmds.on("session_start").once().run(_SAY_TIME)
 
-# Push-ups reminder — every 2 pomodoros (≈ each hour)
-_EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
-    [
-        f"mpv {PUSH_UPS_FILE} --volume=130 --no-terminal",
-        "every:2",
-    ]
-)
+# Push-ups: at session start + every 2 pomodoros
+cmds.on("session_start").always(_PUSH_UPS_CMD)
+cmds.on("pomodoro_done").every(2).run(_PUSH_UPS_CMD)
 
-EVENT_COMMANDS: dict[str, list] = _EVENT_COMMANDS
+EVENT_COMMANDS = cmds.build()
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
@@ -284,7 +280,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "noon": StartupPreset(
         schedule=[[15, 3], [15, 1], [10, 1], [10, 0]],
-        labels=["polymath", "set-up", "applications", "time","github issue","time", "fix code"],
+        labels=["polymath", "set-up", "applications", "prepare git","github issue","continue or fix code", "fix code"],
         switches=[],
         # start_dir=str(PAST_ARC_FILE),
         start_dir=str(ARC_SOUNDTRACKS_PAST),

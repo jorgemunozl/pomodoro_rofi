@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Pomodoro for Termux (Android) — lightweight phone version.
+
+Usage:
+    pomodoro_phone                    Launch the CLI menu
+    pomodoro_phone start [options]    Start a session
+    pomodoro_phone status             Show current status
+    pomodoro_phone stop               Stop current session
+    pomodoro_phone next               Skip phase
+    pomodoro_phone toggle             Pause/resume
+"""
+
+import sys
+import time
+from pathlib import Path
+
+# ── Find the repo root (same logic as the desktop wrapper) ──────────────────
+def _find_root() -> Path | None:
+    own = Path(__file__).resolve().parent
+    if (own / "pomodoro_lib").is_dir():
+        return own
+    for candidate in [Path.home() / d for d in
+                      ["project/pomodoro_rofi", "repos/pomodoro_rofi",
+                       "storage/shared/pomodoro_rofi", "pomodoro_rofi"]]:
+        if (candidate / "pomodoro_lib").is_dir():
+            return candidate
+    return None
+
+root = _find_root()
+if root is not None and str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+
+# ── Monkey-patch desktop dependencies BEFORE importing timer ───────────────
+import subprocess as _subprocess
+from pathlib import Path as _Path
+
+# --- Notifications ---
+def _patched_notify(summary: str, body: str = "",
+                     urgency: str = "normal", color: str | None = None,
+                     timeout: int = 0) -> None:
+    """Use termux-notification instead of dunstify."""
+    cmd = ["termux-notification", "-t", summary]
+    if body:
+        cmd += ["-c", body]
+    if timeout:
+        # termux-notification uses --alert-once for sticky, or -T for timeout in ms
+        cmd += ["-T", str(timeout)]
+    _subprocess.run(cmd, capture_output=True)
+
+# --- Audio: use termux-media-player ---
+_MPV_PID_FILE = _Path("/tmp/pomo_audio_pid")
+
+def _patched_play_audio(file_path: str) -> None:
+    """Play an audio file via termux-media-player."""
+    if not _Path(file_path).exists():
+        return
+    _subprocess.Popen(
+        ["termux-media-player", "play", "-f", file_path],
+        stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
+    )
+
+def _patched_kill_audio() -> None:
+    """Stop audio playback."""
+    _subprocess.run(
+        ["termux-media-player", "stop"],
+        capture_output=True,
+    )
+
+# --- Replace the desktop functions ---
+import pomodoro_lib.timer as _timer
+
+_timer.notify = _patched_notify
+_timer.start_mpv = lambda *a, **kw: _patched_play_audio(str(a[0])) if a else None
+_timer.kill_mpv = _patched_kill_audio
+_timer.play_bell = lambda path: _patched_play_audio(str(path))
+_timer.play_finish_sound = lambda: _patched_play_audio(
+    str(_Path.home() / "Videos" / "study" / "sound_effects" / "finish.mp3")
+)
+_timer.mpv_cmd = lambda *a: False  # no IPC socket on phone
+
+# --- Now import the core (patched) ---
+from pomodoro_lib.config import EVENT_COMMANDS, STARTUP_PRESETS, STATE_FILE, POMO_DIR
+from pomodoro_lib.commands import CommandRunner, CommandsBuilder
+from pomodoro_lib.state import PomodoroState
+from pomodoro_lib.timer import TimerController, notify
+from pomodoro_lib.tasks import TaskManager
+from pomodoro_lib.config import (TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE, DEFAULT_TASKS,
+                                   POMODORO_DEFAULTS)
+
+_cmd_runner = CommandRunner(EVENT_COMMANDS)
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _status_line() -> str:
+    """Minimal status line for the phone."""
+    if not STATE_FILE.exists():
+        return ""
+    state = PomodoroState.load(STATE_FILE)
+    mins = state.remaining_seconds // 60
+    secs = state.remaining_seconds % 60
+    icon = {"work": "▶", "break": "☕", "reflect": "🤔"}.get(state.phase, "•")
+    return f"{icon} {mins:02d}:{secs:02d}  {state.task}  {state.current}/{state.total}"
+
+def _lookup_default_rhythm(video_name: str):
+    """Look up a video's default rhythm from POMODORO_DEFAULTS."""
+    for entry in POMODORO_DEFAULTS:
+        if entry[0] == video_name:
+            if isinstance(entry[1], list):
+                schedule_tuples = entry[1][:-1]
+                warm_up = entry[1][-1]
+                schedule: list[list[int]] = []
+                for tup in schedule_tuples:
+                    work, break_ = tup[0], tup[1]
+                    reps = tup[2] if len(tup) >= 3 else 1
+                    for _ in range(reps):
+                        schedule.append([work, break_])
+                return (schedule[0][0], schedule[0][1], len(schedule), warm_up, schedule)
+            warm_up = entry[4] if len(entry) >= 5 else 0
+            return (entry[1], entry[2], entry[3], warm_up, [])
+    return None
+
+# ── Handlers ────────────────────────────────────────────────────────────────
+
+def _handle_start(args: list[str]) -> None:
+    """Start a session from CLI args (same syntax as desktop)."""
+    task = None
+    rhythm = None
+    count = None
+    audio = False
+
+    # Quick parse
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("--task", "-t"):
+            task = args[i + 1]; i += 1
+        elif a in ("--rhythm", "-r"):
+            rhythm = args[i + 1]; i += 1
+        elif a in ("--count", "-c"):
+            count = int(args[i + 1]); i += 1
+        elif a in ("--audio", "-a"):
+            audio = True
+        i += 1
+
+    task = task or "pomodoro"
+    work_min, break_min, total = 25, 5, count or 1
+    schedule = None
+
+    if rhythm and rhythm.lower() != "default":
+        try:
+            parts = rhythm.split("-")
+            work_min = int(parts[0])
+            break_min = int(parts[1])
+        except (ValueError, IndexError):
+            pass
+
+    if STATE_FILE.exists():
+        print(f"Error: A session is already active. Stop it first with 'pomodoro_phone stop'.", file=sys.stderr)
+        sys.exit(1)
+
+    ctrl = TimerController(cmd_runner=_cmd_runner)
+    ctrl.start(task=task, video="", work_min=work_min, break_min=break_min,
+               total=total, warm_up_secs=0, schedule=schedule,
+               audio_only=audio, arc_mode=False)
+
+    notify("🍅 Pomodoro started",
+           f"{task} — {work_min}min × {total}")
+
+    print(f"🍅 {task} — {work_min}min × {total}")
+    print("  pomodoro_phone status / stop / next / toggle")
+    sys.exit(0)
+
+def _handle_startup_preset(name: str) -> None:
+    """Start a pre-configured startup preset (phone-adapted)."""
+    preset = STARTUP_PRESETS[name]
+
+    if STATE_FILE.exists():
+        print("Error: A session is already active.", file=sys.stderr)
+        sys.exit(1)
+
+    from pomodoro_lib.main import _ensure_mp3  # reuse desktop mp3 generator
+
+    first_work, first_break = preset.schedule[0]
+    total = len(preset.schedule)
+
+    # Determine mode
+    start_path = Path(preset.start_dir) if preset.start_dir else None
+    is_arc = start_path and start_path.is_dir()
+    is_file = start_path and start_path.is_file()
+
+    if is_arc:
+        arc_mode, audio_only = True, True
+        silence = preset.silence_secs
+        warm_up = 0
+    elif is_file:
+        arc_mode, audio_only = False, True
+        silence = 1
+        _ensure_mp3(start_path)
+        rhythm_data = _lookup_default_rhythm(start_path.name)
+        warm_up = rhythm_data[3] if rhythm_data else 0
+    else:
+        arc_mode = audio_only = False
+        silence = 0
+        warm_up = 0
+
+    preset_runner = CommandRunner.merge(EVENT_COMMANDS, getattr(preset, "commands", None))
+    ctrl = TimerController(cmd_runner=preset_runner)
+
+    ctrl.start(task="startup", video=preset.start_dir or "",
+               work_min=first_work, break_min=first_break, total=total,
+               warm_up_secs=warm_up, schedule=preset.schedule,
+               schedule_labels=preset.labels, audio_only=audio_only,
+               arc_mode=arc_mode, silence_secs=silence,
+               notify_color=preset.notify_color,
+               notify_title=preset.notify_title,
+               notify_desc=preset.notify_desc,
+               notify_timeout=preset.notify_timeout,
+               notify_phases=preset.notify_phases or {})
+
+    if preset.switches:
+        state = PomodoroState.load(STATE_FILE)
+        state.arc_switches = preset.switches
+        state.save(STATE_FILE)
+
+    print(f"🍅 {name}: {preset.description or 'started'}")
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+
+def main() -> None:
+    args = sys.argv[1:]
+
+    if not args:
+        print("pomodoro_phone — Termux pomodoro timer")
+        print("  start --task <name> [-r 25-5] [-c 4] [-a]")
+        print("  status  |  stop  |  next  |  toggle")
+        print("  startup | startup2 | ...  (presets)")
+        print("  random  (hands-free shuffle)")
+        return
+
+    cmd = args[0]
+    ctrl = TimerController(cmd_runner=_cmd_runner)
+
+    if cmd == "status":
+        print(_status_line())
+    elif cmd == "stop":
+        ctrl.clear_state()
+    elif cmd == "next":
+        ctrl.skip_phase()
+    elif cmd == "toggle":
+        ctrl.toggle()
+    elif cmd == "start":
+        _handle_start(args[1:])
+    elif cmd in STARTUP_PRESETS:
+        _handle_startup_preset(cmd)
+    elif cmd == "random":
+        from pomodoro_lib.main import _handle_random
+        _handle_random()
+    else:
+        print(f"Unknown command: {cmd}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

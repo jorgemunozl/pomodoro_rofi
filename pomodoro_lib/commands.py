@@ -62,7 +62,72 @@ EVENT_BELL_END = "bell_end"  # Work period fully ended
 #   - [str, "every:N"] → fire when session % N == 0
 
 CommandEntry = str | list  # [cmd_str, session_filter]
-CommandMap = dict[str, list[CommandEntry]]
+EventCommands = dict[str, list[CommandEntry]]
+
+
+class CommandsBuilder:
+    """Fluent builder for EVENT_COMMANDS / preset commands.
+
+    Usage::
+
+        cmds = CommandsBuilder()
+        cmds.on("pomodoro_done").always("echo every time")
+        cmds.on("pomodoro_done").at(0).run("echo first")
+        cmds.on("pomodoro_done").every(2).run("mpv push_ups.mp3")
+        cmds.on("session_start").once().run("echo start")
+        EVENT_COMMANDS = cmds.build()
+    """
+
+    def __init__(self) -> None:
+        self._commands: dict[str, list[CommandEntry]] = {}
+
+    def on(self, event: str) -> "_PhaseConfig":
+        """Start configuring commands for *event*."""
+        return _PhaseConfig(self._commands, event)
+
+    def build(self) -> EventCommands:
+        """Return the built command map."""
+        return dict(self._commands)
+
+
+class _PhaseConfig:
+    """Fluent config for a single phase's commands."""
+
+    def __init__(self, parent: dict[str, list[CommandEntry]], event: str) -> None:
+        self._parent = parent
+        self._event = event
+
+    def always(self, cmd: str) -> "_PhaseConfig":
+        """Add a command that fires every time."""
+        self._parent.setdefault(self._event, []).append(cmd)
+        return self
+
+    def at(self, index: int) -> "_FilteredCommand":
+        """Add a command that fires only at a specific session index."""
+        return _FilteredCommand(self._parent, self._event, index)
+
+    def every(self, interval: int) -> "_FilteredCommand":
+        """Add a command that fires every N sessions."""
+        return _FilteredCommand(self._parent, self._event, f"every:{interval}")
+
+    def once(self) -> "_FilteredCommand":
+        """Add a command that fires on the first session only (index 0)."""
+        return _FilteredCommand(self._parent, self._event, 0)
+
+
+class _FilteredCommand:
+    """A command with a session filter, finalized by .run()."""
+
+    def __init__(
+        self, parent: dict[str, list[CommandEntry]], event: str, filter_: int | str
+    ) -> None:
+        self._parent = parent
+        self._event = event
+        self._filter = filter_
+
+    def run(self, cmd: str) -> None:
+        """Register the command with this filter."""
+        self._parent.setdefault(self._event, []).append([cmd, self._filter])
 
 
 class CommandRunner:
@@ -71,8 +136,8 @@ class CommandRunner:
     See module docstring for the entry format.
     """
 
-    def __init__(self, commands: CommandMap | None = None) -> None:
-        self._commands: CommandMap = commands or {}
+    def __init__(self, commands: EventCommands | None = None) -> None:
+        self._commands: EventCommands = commands or {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -99,13 +164,13 @@ class CommandRunner:
         return bool(self._commands.get(event))
 
     @classmethod
-    def merge(cls, *sources: CommandMap | None) -> "CommandRunner":
+    def merge(cls, *sources: EventCommands | None) -> "CommandRunner":
         """Create a runner that chains commands from multiple dicts.
 
         Later sources are appended after earlier ones, so multiple
         commands can fire for the same event.
         """
-        merged: CommandMap = {}
+        merged: EventCommands = {}
         for src in sources:
             if not src:
                 continue
