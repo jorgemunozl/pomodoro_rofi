@@ -27,6 +27,7 @@ from pomodoro_lib.config import (
     POMODORO_DEFAULTS,
     REFLECTION_SECS,
     STATE_FILE,
+    TMP_DIR,
     WORK_BELL_PLAYED,
 )
 from pomodoro_lib.state import PomodoroState
@@ -34,7 +35,7 @@ from pomodoro_lib.state import PomodoroState
 
 def ensure_silence_mp3(silence_secs: int = ARC_SILENCE_SECONDS) -> Path:
     """Generate or return cached silence mp3."""
-    path = Path(f"/tmp/{silence_secs}s-silence.mp3")
+    path = TMP_DIR / f"{silence_secs}s-silence.mp3"
     if not path.exists():
         subprocess.run(
             [
@@ -133,6 +134,9 @@ def notify(
     *color* is a named color (default|red|yellow|blue|…) from NOTIFY_COLORS.
     *timeout* is milliseconds (0 = dunst default).
     If both urgency and color are given, *color* wins.
+
+    Falls back to ``termux-notification`` when dunstify is unavailable
+    (e.g. Termux), and to a plain stdout line when neither exists.
     """
     if color:
         urgency = NOTIFY_COLORS.get(color, urgency)
@@ -140,14 +144,39 @@ def notify(
     if timeout:
         cmd += ["-t", str(timeout)]
     cmd += [summary, body]
-    subprocess.run(cmd, capture_output=True)
+    try:
+        subprocess.run(cmd, capture_output=True)
+        return
+    except FileNotFoundError:
+        pass  # dunstify not installed
+
+    # Termux fallback
+    try:
+        subprocess.run(
+            [
+                "termux-notification",
+                "--title",
+                summary,
+                "--content",
+                body or summary,
+                "--priority",
+                "high" if urgency == "critical" else "normal",
+            ],
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        # No notification daemon at all — log instead of crashing
+        print(f"[pomodoro] {summary} — {body}")
 
 
 def i3_workspace() -> None:
-    subprocess.run(
-        ["i3-msg", "workspace --no-auto-back-and-forth 🍅"],
-        capture_output=True,
-    )
+    try:
+        subprocess.run(
+            ["i3-msg", "workspace --no-auto-back-and-forth 🍅"],
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        pass  # not running under i3 (e.g. Termux)
 
 
 def mpv_cmd(json_cmd: str) -> bool:
@@ -226,7 +255,6 @@ def start_mpv(
                 "--loop",
                 "--no-terminal",
                 "--no-video",
-                "x11-name=no_reg",
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 str(audio_path),
             ],

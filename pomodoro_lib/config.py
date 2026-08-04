@@ -1,6 +1,7 @@
 """Paths, presets, and defaults for the pomodoro timer."""
 
 import os
+import tempfile
 from pathlib import Path
 
 # ── Project root ──────────────────────────────────────────────────────────────
@@ -44,17 +45,22 @@ open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 cleaning = "imv -f ~/Videos/clean.jpg"
 
-STATE_FILE = Path("/tmp/pomo_state.json")
-PID_FILE = Path("/tmp/pomo_mpv.pid")
-TIMER_PID_FILE = Path("/tmp/pomo_timer.pid")
-PAUSE_FILE = Path("/tmp/pomo_pause")
-PAUSE_TS = Path("/tmp/pomo_pause_ts")
-SKIP_RANDOM_FILE = Path("/tmp/pomo_skip_random")
-BELL_30_PLAYED = Path("/tmp/pomo_bell_30_played")
-BELL_BEGIN_PLAYED = Path("/tmp/pomo_bell_begin_played")
-WORK_BELL_PLAYED = Path("/tmp/pomo_work_bell_played")
-FINISH_PLAYED = Path("/tmp/pomo_finish_played")
-MPV_SOCKET = Path("/tmp/mpvsocket")
+# ── Runtime state files ────────────────────────────────────────────────────
+# Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
+# and /tmp on regular Linux desktops.
+TMP_DIR = Path(tempfile.gettempdir())
+
+STATE_FILE = TMP_DIR / "pomo_state.json"
+PID_FILE = TMP_DIR / "pomo_mpv.pid"
+TIMER_PID_FILE = TMP_DIR / "pomo_timer.pid"
+PAUSE_FILE = TMP_DIR / "pomo_pause"
+PAUSE_TS = TMP_DIR / "pomo_pause_ts"
+SKIP_RANDOM_FILE = TMP_DIR / "pomo_skip_random"
+BELL_30_PLAYED = TMP_DIR / "pomo_bell_30_played"
+BELL_BEGIN_PLAYED = TMP_DIR / "pomo_bell_begin_played"
+WORK_BELL_PLAYED = TMP_DIR / "pomo_work_bell_played"
+FINISH_PLAYED = TMP_DIR / "pomo_finish_played"
+MPV_SOCKET = TMP_DIR / "mpvsocket"
 
 TASKS_FILE = DATA_DIR / "tasks"
 TASKS_UNIQUE = DATA_DIR / "tasks_unique"
@@ -206,16 +212,18 @@ so it fires for ALL sessions and presets. Set to ``False`` to disable.
 
 _EVENT_COMMANDS: dict[str, list] = {}
 
+_TMP = Path(tempfile.gettempdir())
+
 if ANNOUNCE_TIME_ON_DONE:
     _EVENT_COMMANDS.setdefault("pomodoro_done", []).append(
-        'gtts-cli "The time is $(date "+%I:%M %p")" '
-        "--output /tmp/say_time.mp3 "
-        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
+        f'gtts-cli "The time is $(date "+%I:%M %p")" '
+        f"--output {_TMP / 'say_time.mp3'} "
+        f"&& mpv {_TMP / 'say_time.mp3'} --volume=130 --no-terminal"
     )
     _EVENT_COMMANDS.setdefault("pomodoro_begin", []).append(
-        'gtts-cli "The time is $(date "+%I:%M %p")" '
-        "--output /tmp/say_time.mp3 "
-        "&& mpv /tmp/say_time.mp3 --volume=130 --no-terminal"
+        f'gtts-cli "The time is $(date "+%I:%M %p")" '
+        f"--output {_TMP / 'say_time.mp3'} "
+        f"&& mpv {_TMP / 'say_time.mp3'} --volume=130 --no-terminal"
     )
 
 # Push-ups reminder — every 2 pomodoros (≈ each hour)
