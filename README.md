@@ -39,6 +39,9 @@ and a GitHub-style contribution heatmap.
 
 ## Installation
 
+> **Running on a phone (Termux/Android)?** See
+> [README_TERMUX.md](README_TERMUX.md) for the full setup guide.
+
 ### Dependencies
 
 - **Python** 3.10+
