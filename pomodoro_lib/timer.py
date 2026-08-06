@@ -915,25 +915,30 @@ class TimerController:
 
         play_finish_sound()
 
-        # Fire event before session-complete callback but before clearing state
-        self._cmd_runner.run(
-            "session_complete",
-            task=self.state.task,
-            work_min=self.state.work_min,
-            total=self.state.total,
-        )
+        # Capture context before clearing state
+        task = self.state.task
+        work_min = self.state.work_min
+        total = self.state.total
 
         self._notify(
             "🍅 Time's up!",
-            f'"{self.state.task}" — {self.state.total} session(s) complete!',
+            f'"{task}" — {total} session(s) complete!',
             phase="finished",
-            session=self.state.total - 1,
+            session=total - 1,
         )
         if self._on_session_complete:
-            self._on_session_complete(
-                self.state.task, self.state.work_min, self.state.total
-            )
+            self._on_session_complete(task, work_min, total)
+
+        # Clear state BEFORE firing session_complete so commands that start a
+        # new session (e.g. "pomodoro random") find a clean state.
         self.clear_state()
+
+        self._cmd_runner.run(
+            "session_complete",
+            task=task,
+            work_min=work_min,
+            total=total,
+        )
 
     # ── Expired-phase check (polybar-driven transitions) ─────────────────────
 

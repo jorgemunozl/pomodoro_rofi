@@ -1,6 +1,4 @@
 """Paths, presets, and defaults for the pomodoro timer."""
-
-import os
 import tempfile
 from pathlib import Path
 
@@ -39,11 +37,15 @@ PAST_ARC_FILE = Path.home() / "Videos" / "music"
 # COMMANDS
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/member/jorgemunozl"'
+open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/play"'
 open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 cleaning = "imv -f ~/Videos/clean.jpg"
+open_dawn= 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
+open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
+open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2_2025_II.mp4'
+open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
@@ -198,7 +200,7 @@ class StartupPreset:
 # ── Flags ─────────────────────────────────────────────────────────────────────
 # Toggle these to enable/disable common behaviours without editing every preset.
 
-ANNOUNCE_TIME_ON_DONE: bool = True
+ANNOUNCE_TIME_ON_DONE: bool = False
 """When True, speaks the current time via gtts-cli after every pomodoro.
 
 This is injected into the global EVENT_COMMANDS under ``pomodoro_done``,
@@ -214,21 +216,21 @@ from pomodoro_lib.commands import CommandsBuilder
 _TMP = Path(tempfile.gettempdir())
 
 _SAY_TIME = (
-    'gtts-cli "The time is $(date "+%I:%M %p")" '
-    f"--output {_TMP / 'say_time.mp3'} "
-    f"&& mpv {_TMP / 'say_time.mp3'} --volume=130 --no-terminal"
+    f'F="{SOUNDS_DIR}/say_time_$(date +%I_%M_%p).mp3"; '
+    "[ -f \"$F\" ] || gtts-cli \"The time is $(date '+%I:%M %p')\" --output \"$F\"; "
+    'mpv "$F" --volume=130 --no-terminal'
 )
 _PUSH_UPS_CMD = f"mpv {PUSH_UPS_FILE} --volume=130 --no-terminal"
 
 cmds = CommandsBuilder()
 
 if ANNOUNCE_TIME_ON_DONE:
-    cmds.on("pomodoro_done").always(_SAY_TIME)
-    cmds.on("session_start").once().run(_SAY_TIME)
+    cmds.on("session_start").always(_PUSH_UPS_CMD)
+    cmds.on("pomodoro_done").every(2).run(_PUSH_UPS_CMD)
 
 # Push-ups: at session start + every 2 pomodoros
-cmds.on("session_start").always(_PUSH_UPS_CMD)
-cmds.on("pomodoro_done").every(2).run(_PUSH_UPS_CMD)
+cmds.on("pomodoro_done").always(_SAY_TIME)
+cmds.on("session_start").once().run(_SAY_TIME)
 
 EVENT_COMMANDS = cmds.build()
 
@@ -279,7 +281,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "night_light": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 1]],
-        labels=["polymath / applications", "wash teeth", "pomodoro", "prepare for tomorrow", "pomodoro", "prepare for tomorrow", "pomodoro", "grab a book to read"],
+        labels=["polymath / applications", "wash teeth", "pomodoro", "prepare for tomorrow", "pomodoro", "log metrics", "pomodoro", "grab a book to read"],
         switches=[],
         start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
         silence_secs=ARC_SILENCE_SECONDS,
@@ -287,11 +289,12 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
     ),
     "noon": StartupPreset(
-        schedule=[[15, 3], [15, 1], [10, 1], [10, 0]],
-        labels=["polymath", "set-up", "applications", "prepare git","github issue","continue or fix code", "fix code"],
+        schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
+        labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan the next hours, go to walk or begin workout"],
         switches=[],
         # start_dir=str(PAST_ARC_FILE),
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        # start_dir=str(ARC_SOUNDTRACKS_PAST),
+        start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon after eat/nap",
         notify_color="blue",
@@ -299,10 +302,16 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "session_start": [
                 open_zk
             ],  # only once, at the very beginning (plain string)
+            "break_done":[
+                [open_zed, 2],  # after 4th pomodoro
+            ],
             "pomodoro_done": [
                 [open_personal, 1],  # after 1st pomodoro
-                [open_git, 2],  # after 3rd pomodoro
-                [open_zed, 3],  # after 4th pomodoro
+                [open_git, 2],  # after 2rd pomodoro
+                [open_chess, 3]  # after 3rd pomodoro
+            ],
+            "session_complete": [
+                f"{open_tired} & sleep 1800 & {open_mine}",
             ],
         },
     ),
@@ -324,7 +333,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "plan, plan",
         ],
         switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
         description="morning winter ritual",
         notify_color="yellow",
@@ -339,6 +348,9 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro
                     ],
+                    "session_complete": [
+                        open_dawn,
+                    ],
                 },
     ),
     "afternoon": StartupPreset(
@@ -350,7 +362,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[0.2, 0.2], [0.2, 0.2], [0.2, 0.2]],
+        schedule=[[0.2, 0.2]],
         labels=["test"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
@@ -359,6 +371,9 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_desc="eso tilin",
         notify_title="a la mrd",
         description="asd",
+        commands={
+            "pomodoro_done": [f"{open_tired}; sleep 1800; {open_shinjuku_2}"],
+        },
         notify_phases={
             # Same style as commands: plain dict → always, [dict, int] → indexed
             "pomodoro_done": [
