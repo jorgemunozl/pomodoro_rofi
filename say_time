@@ -1,62 +1,43 @@
 #!/usr/bin/env python3
-"""Announce the time every N minutes using gTTS + mpv.
+"""Announce the time every 5 minutes using pre-recorded mp3s.
 
-Standalone — no pomodoro dependencies. Works on the laptop and on
-Termux (Android). Requires `gtts-cli` (pip install gTTS) and `mpv`,
-plus internet access for speech generation.
+Offline — no gtts, no internet. Plays the matching clip from
+~/Videos/study/sound_effects/ (say_time_HH_MM_AM/PM.mp3) exactly at
+each 5-minute mark (HH:00, HH:05, HH:10, …).
 
 Usage:
-    say_time                       # announce now, then every 5 minutes
-    say_time --interval 600        # every 10 minutes
-    say_time --once                # single announcement (handy for testing)
-    say_time --phrase "It is {time}, keep going" --volume 100
+    say_time                       # align to next 5-min mark, then announce
+    say_time --once                # announce the current time once (test)
+    say_time --time "11:55 AM"     # play that clip and exit (test hook)
+    say_time --dir /path/to/clips  # custom clips directory
+    say_time --volume 100          # mpv volume
 """
 
 import argparse
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
-DEFAULT_INTERVAL = 5 * 60  # seconds
-DEFAULT_PHRASE = "Attention, the time is {time}"
+INTERVAL = 5 * 60  # seconds — announce at every 5-minute mark
+DEFAULT_DIR = Path.home() / "Videos" / "study" / "sound_effects"
 DEFAULT_VOLUME = 130
 
 
-def current_time() -> str:
-    """Current time as "HH:MM AM/PM" (e.g. "10:30 AM")."""
-    return time.strftime("%I:%M %p")
+def clip_path(directory: Path, t: time.struct_time) -> Path:
+    """Map a time to its clip file (say_time_HH_MM_AM/PM.mp3)."""
+    hour = t.tm_hour % 12 or 12  # 1..12 (12-hour clock)
+    ampm = "AM" if t.tm_hour < 12 else "PM"
+    return directory / f"say_time_{hour:02d}_{t.tm_min:02d}_{ampm}.mp3"
 
 
-def speak(phrase: str, volume: int) -> bool:
-    """Generate speech with gtts-cli and play it with mpv.
-
-    Returns True on success, False on any failure (missing tools,
-    no internet, …) — the loop keeps running either way.
-    """
-    out = Path(tempfile.gettempdir()) / "say_time.mp3"
-    try:
-        subprocess.run(
-            ["gtts-cli", phrase, "--output", str(out)],
-            capture_output=True,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        print("say_time: gtts-cli not found — install with 'pip install gTTS'",
-              file=sys.stderr)
+def play(path: Path, volume: int) -> bool:
+    """Play a clip with mpv. Returns False if the clip or mpv is missing."""
+    if not path.exists():
         return False
-    except subprocess.TimeoutExpired:
-        print("say_time: gtts-cli timed out — no internet?", file=sys.stderr)
-        return False
-
-    if not out.exists() or out.stat().st_size == 0:
-        print("say_time: no speech generated (check internet)", file=sys.stderr)
-        return False
-
     try:
         subprocess.Popen(
-            ["mpv", "--no-terminal", "--no-video", f"--volume={volume}", str(out)],
+            ["mpv", "--no-terminal", "--no-video", f"--volume={volume}", str(path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -67,44 +48,73 @@ def speak(phrase: str, volume: int) -> bool:
     return True
 
 
-def announce(phrase: str, volume: int) -> None:
-    """Say the time once and log it."""
-    text = phrase.format(time=current_time())
-    ok = speak(text, volume)
-    print(f"{time.strftime('%H:%M:%S')} {'✓' if ok else '✗'} {text}", flush=True)
+def announce(directory: Path, volume: int, t: time.struct_time | None = None) -> None:
+    """Say the time for *t* (default: now) and log the result."""
+    t = t or time.localtime()
+    clip = clip_path(directory, t)
+    ok = play(clip, volume)
+    status = "✓" if ok else "✗"
+    print(f"{time.strftime('%H:%M:%S')} {status} {clip.name}", flush=True)
+
+
+def seconds_to_next_boundary(now: float | None = None) -> float:
+    """Seconds until the next 5-minute mark (0 if exactly on one)."""
+    now = int(now if now is not None else time.time())
+    return (-now) % INTERVAL
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Announce the time every N minutes via gTTS + mpv."
+        description="Announce the time every 5 minutes from local mp3 clips."
     )
     ap.add_argument(
-        "-i", "--interval", type=int, default=DEFAULT_INTERVAL,
-        help=f"seconds between announcements (default {DEFAULT_INTERVAL})",
+        "-d", "--dir", default=str(DEFAULT_DIR),
+        help=f"directory with say_time_* clips (default {DEFAULT_DIR})",
     )
     ap.add_argument(
         "-v", "--volume", type=int, default=DEFAULT_VOLUME,
         help=f"mpv volume (default {DEFAULT_VOLUME})",
     )
     ap.add_argument(
-        "-p", "--phrase", default=DEFAULT_PHRASE,
-        help='phrase template; {time} is replaced with "HH:MM AM/PM"',
+        "--once", action="store_true",
+        help="announce the current time once and exit (only works at "
+             "5-minute marks)",
     )
     ap.add_argument(
-        "--once", action="store_true",
-        help="announce once and exit",
+        "--time", metavar='"HH:MM AM"',
+        help="play the clip for a specific time and exit (testing aid)",
     )
     args = ap.parse_args()
+    directory = Path(args.dir)
 
-    announce(args.phrase, args.volume)
-    if args.once:
+    # Test hook: play one specific clip and exit
+    if args.time:
+        try:
+            t = time.strptime(args.time, "%I:%M %p")
+        except ValueError:
+            print(f"say_time: cannot parse --time {args.time!r} "
+                  f'(use e.g. "11:55 AM")', file=sys.stderr)
+            sys.exit(1)
+        announce(directory, args.volume, t)
         return
 
-    print(f"say_time: announcing every {args.interval}s — Ctrl+C to stop")
+    if args.once:
+        announce(directory, args.volume)
+        return
+
+    # Main loop: wait for the next 5-minute mark, announce, repeat
+    delay = seconds_to_next_boundary()
+    if delay > 0:
+        next_at = time.localtime(time.time() + delay)
+        print(f"say_time: next announcement at "
+              f"{time.strftime('%I:%M', next_at)} {time.strftime('%p', next_at)}"
+              f" — Ctrl+C to stop", flush=True)
     try:
         while True:
-            time.sleep(args.interval)
-            announce(args.phrase, args.volume)
+            delay = seconds_to_next_boundary()
+            if delay > 0:
+                time.sleep(delay)
+            announce(directory, args.volume)
     except KeyboardInterrupt:
         print("\nsay_time: stopped")
 
