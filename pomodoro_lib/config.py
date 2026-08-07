@@ -44,8 +44,13 @@ open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacrit
 cleaning = "imv -f ~/Videos/clean.jpg"
 open_dawn= 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
 open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
-open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2_2025_II.mp4'
+open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2.mp4'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
+shutdown_command = "python3 ~/dotfiles/alarm/alarm.py"
+calendly ='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=canvas%2Fdays-of-the-week-researchy"'
+open_gmail = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/0/#inbox"'
+open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/1/#inbox"'
+open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
 
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
@@ -236,33 +241,6 @@ EVENT_COMMANDS = cmds.build()
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
-    "startup": StartupPreset(
-        schedule=[[15, 2], [13, 5], [25, 5], [25, 5], [25, 0]],
-        labels=["polymath", "set-up", "applications"],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_STARTUP,
-        description="15m polymath | 2m set-up | 13m applications | 3× 25/5  🎶 CURRENT_ARC",
-    ),
-    "startup2": StartupPreset(
-        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]],
-        labels=["polymath", "set-up", "applications"],
-        switches=[[3, str(PAST_ARC_FILE)]],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_STARTUP,
-        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  3× 25/5  🎶 PAST_ARC",
-    ),
-    "startup3": StartupPreset(
-        schedule=[[20, 4], [15, 5], [25, 5], [25, 5], [25, 0]],
-        labels=["polymath", "set-up", "applications"],
-        switches=[
-            [3, str(ARC_SOUNDTRACKS_PAST)],
-            [4, str(PAST_ARC_FILE)],
-        ],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_STARTUP,
-        description="20m polymath | 4m set-up | 15m applications  🎶 CURRENT_ARC  →  25/5  🎶 PAST_ARC  →  2× 25/5  🎶 MUSIC",
-    ),
     "night_hardcore": StartupPreset(
         schedule=[
             [15, 2],
@@ -280,38 +258,47 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="night hardcore",
     ),
     "night_light": StartupPreset(
-        schedule=[[25, 5], [25, 5], [25, 5], [25, 1]],
-        labels=["polymath / applications", "wash teeth", "pomodoro", "prepare for tomorrow", "pomodoro", "log metrics", "pomodoro", "grab a book to read"],
+        schedule=[[25, 5], [25, 5], [25, 5], [25, 1], [25, 1]],
+        labels=["polymath / applications",
+            "wash teeth",
+            "blue pomodoro",
+            "prepare for tomorrow",
+            "blue pomodoro",
+            "log metrics",
+            "blue pomodoro",
+            "last chess of the day and grab a book to read",
+            "practicing next arc night"
+        ],
+
         switches=[],
         start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="night good one",
+        description="night good one, from seven 7.40 to 7.55 turn it on",
+        commands={
+            "session_complete": [f"{open_chess}, sleep 420, {shutdown_command}"],
+            "session_start": [calendly],
+        },
         notify_color="blue",
     ),
     "noon": StartupPreset(
         schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
-        labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan the next hours, go to walk or begin workout"],
+        labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
         switches=[],
-        # start_dir=str(PAST_ARC_FILE),
-        # start_dir=str(ARC_SOUNDTRACKS_PAST),
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="noon after eat/nap",
+        description="noon after eat around preparing ourselves for the nap",
         notify_color="blue",
         commands={
             "session_start": [
                 open_zk
             ],  # only once, at the very beginning (plain string)
-            "break_done":[
-                [open_zed, 2],  # after 4th pomodoro
-            ],
             "pomodoro_done": [
-                [open_personal, 1],  # after 1st pomodoro
-                [open_git, 2],  # after 2rd pomodoro
+                [calendly, 1],  # after 1st pomodoro
+                [open_zed, 2],  # after 2rd pomodoro
                 [open_chess, 3]  # after 3rd pomodoro
             ],
             "session_complete": [
-                f"{open_tired} & sleep 1800 & {open_mine}",
+                f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
             ],
         },
     ),
@@ -342,8 +329,8 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                         open_zk
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
-                        [open_personal, 1],  # after 1st pomodoro
-                        [open_terminal_riced, 2],  # after 3rd pomodoro
+                        [calendly, 1],  # after 1st pomodoro
+                        [f"{open_terminal_riced} & {open_gmail} & {open_huggingface} & {open_gmail_uni}", 2],  # after 3rd pomodoro
                     ],
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro
@@ -362,7 +349,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[0.2, 0.2]],
+        schedule=[[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]],
         labels=["test"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
@@ -372,8 +359,18 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_title="a la mrd",
         description="asd",
         commands={
-            "pomodoro_done": [f"{open_tired}; sleep 1800; {open_shinjuku_2}"],
-        },
+                    "session_start": [
+                        open_zk
+                    ],  # only once, at the very beginning (plain string)
+                    "pomodoro_done": [
+                        [calendly, 1],  # after 1st pomodoro
+                        [open_zed, 2],  # after 2rd pomodoro
+                        [open_chess, 3]  # after 3rd pomodoro
+                    ],
+                    "session_complete": [
+                        f"sleep 1 ;{open_tired} ; {open_shinjuku_2}",
+                    ],
+                },
         notify_phases={
             # Same style as commands: plain dict → always, [dict, int] → indexed
             "pomodoro_done": [
@@ -396,5 +393,14 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         commands={
             "session_start": [cleaning],
         },
+    ),
+    "phone_morning": StartupPreset(
+        schedule=[[]],
+        labels=["going to take the bus", "wait the bus", "using the bus", "leaving the bus"],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=0,
+        description="Phone morning when going to the university",
+        commands={},
     ),
 }

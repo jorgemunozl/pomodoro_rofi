@@ -14,7 +14,6 @@ from pomodoro_lib.commands import (
 from pomodoro_lib.config import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
-    ARC_STARTUP,
     BACK_LABEL,
     BELL_30_FILE,
     BELL_30_PLAYED,
