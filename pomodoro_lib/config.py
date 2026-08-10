@@ -46,11 +46,14 @@ open_dawn= 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
 open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
 open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2.mp4'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
+i3_tab = 'i3-msg  '
 shutdown_command = "python3 ~/dotfiles/alarm/alarm.py"
 calendly ='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=canvas%2Fdays-of-the-week-researchy"'
 open_gmail = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/0/#inbox"'
 open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/1/#inbox"'
 open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
+slack='slack'
+nchat='alacritty -e nchat'
 
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
@@ -72,6 +75,7 @@ MPV_SOCKET = TMP_DIR / "mpvsocket"
 TASKS_FILE = DATA_DIR / "tasks"
 TASKS_UNIQUE = DATA_DIR / "tasks_unique"
 HISTORY_FILE = DATA_DIR / "history"
+CMD_LOG_FILE = DATA_DIR / "cmd_history"
 
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
 
@@ -330,13 +334,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
                         [calendly, 1],  # after 1st pomodoro
-                        [f"{open_terminal_riced} & {open_gmail} & {open_huggingface} & {open_gmail_uni}", 2],  # after 3rd pomodoro
+                        [f"{open_gmail} & {open_huggingface} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}", 2],  # after 3rd pomodoro
                     ],
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro
                     ],
                     "session_complete": [
-                        open_dawn,
+                        f"sleep 15 ;{open_dawn}",
                     ],
                 },
     ),

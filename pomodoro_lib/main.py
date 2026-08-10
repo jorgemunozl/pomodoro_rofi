@@ -20,6 +20,7 @@ from pomodoro_lib.config import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
+    CMD_LOG_FILE,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
@@ -51,7 +52,7 @@ from pomodoro_lib.tasks import TaskManager
 from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_bell
 
 # ── Shared command runner (wired from EVENT_COMMANDS) ────────────────────────
-_cmd_runner = CommandRunner(EVENT_COMMANDS)
+_cmd_runner = CommandRunner(EVENT_COMMANDS, log_path=CMD_LOG_FILE)
 
 # ── Polybar status line ───────────────────────────────────────────────────────
 
@@ -1636,7 +1637,8 @@ def _handle_startup_preset(name: str) -> None:
 
     # Merge global EVENT_COMMANDS with the preset's own commands
     preset_runner = CommandRunner.merge(
-        EVENT_COMMANDS, getattr(preset, "commands", None)
+        EVENT_COMMANDS, getattr(preset, "commands", None),
+        log_path=CMD_LOG_FILE,
     )
 
     ctrl = TimerController(
@@ -1815,6 +1817,46 @@ def _handle_random() -> None:
     notify("🎲 Random pomodoro", "All videos finished!")
 
 
+def _handle_log() -> None:
+    """Print session history followed by today's command-execution logs."""
+    today_str = time.strftime("%Y-%m-%d")
+
+    # ── Session history ────────────────────────────────────────────────────
+    if HISTORY_FILE.exists():
+        lines = [l.strip() for l in HISTORY_FILE.read_text().splitlines() if l.strip()]
+        if lines:
+            print(f"{'Date':12} {'Time':7}  Task / Info")
+            print("-" * 70)
+            for line in lines:
+                try:
+                    # [YYYY-MM-DD HH:MM] task — duration_info
+                    bracket, rest = line.split("] ", 1)
+                    date_time = bracket[1:]
+                    date_str, time_str = date_time.split(" ", 1)
+                    if not rest or rest.startswith("—"):
+                        rest = "(no task) " + rest
+                    print(f"{date_str:12} {time_str:7}  {rest}")
+                except (ValueError, IndexError):
+                    print(line)
+            print()
+
+    # ── Today's command-execution log ───────────────────────────────────────
+    if CMD_LOG_FILE.exists():
+        cmd_lines = [
+            l.strip()
+            for l in CMD_LOG_FILE.read_text().splitlines()
+            if l.strip() and l.startswith(f"[{today_str} ")
+        ]
+        if cmd_lines:
+            print(f"── Commands run today ({today_str}) ──")
+            for line in cmd_lines:
+                print(line)
+            print()
+
+    if not HISTORY_FILE.exists() and not CMD_LOG_FILE.exists():
+        print("No history yet.")
+
+
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
@@ -1830,6 +1872,8 @@ def _run_subcommand(args: list[str]) -> None:
         ctrl.skip_phase()
     elif cmd == "start":
         _handle_start(args[1:])
+    elif cmd == "log":
+        _handle_log()
     elif cmd == "random":
         _handle_random()
     elif cmd == "skip_random":
@@ -1904,8 +1948,10 @@ def _run_ui() -> None:
 def main() -> None:
     args = sys.argv[1:]
     if args:
-        # If the first argument starts with '-', treat it as a 'start' command
-        if args[0].startswith("-"):
+        # -log / --log  →  show session history
+        if args[0] in ("-log", "--log"):
+            _handle_log()
+        elif args[0].startswith("-"):
             _handle_start(args)
         else:
             _run_subcommand(args)

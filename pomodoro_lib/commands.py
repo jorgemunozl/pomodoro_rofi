@@ -41,6 +41,7 @@ context variable.
 
 import logging
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 # ── Event names ────────────────────────────────────────────────────────────────
@@ -136,8 +137,13 @@ class CommandRunner:
     See module docstring for the entry format.
     """
 
-    def __init__(self, commands: EventCommands | None = None) -> None:
+    def __init__(
+        self,
+        commands: EventCommands | None = None,
+        log_path: Path | None = None,
+    ) -> None:
         self._commands: EventCommands = commands or {}
+        self._log_path = log_path
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -150,7 +156,14 @@ class CommandRunner:
         if not entries:
             return
         for entry in entries:
-            self._execute(entry, context)
+            try:
+                self._execute(entry, context)
+            except Exception:
+                # Never let one failing command break the rest of the chain.
+                logging.warning(
+                    "CommandRunner: error executing entry for event %r", event,
+                    exc_info=True,
+                )
 
     # ── Config access ──────────────────────────────────────────────────────────
 
@@ -164,7 +177,11 @@ class CommandRunner:
         return bool(self._commands.get(event))
 
     @classmethod
-    def merge(cls, *sources: EventCommands | None) -> "CommandRunner":
+    def merge(
+        cls,
+        *sources: EventCommands | None,
+        log_path: Path | None = None,
+    ) -> "CommandRunner":
         """Create a runner that chains commands from multiple dicts.
 
         Later sources are appended after earlier ones, so multiple
@@ -178,7 +195,7 @@ class CommandRunner:
                 merged.setdefault(event, []).extend(
                     e for e in entries if e not in merged.get(event, [])
                 )
-        return cls(merged)
+        return cls(merged, log_path=log_path)
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
@@ -227,12 +244,38 @@ class CommandRunner:
             return
 
         cmd = self._format(cmd_str, context)
-        try:
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception as exc:
-            logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
+
+        if self._log_path:
+            import shlex
+
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            short = cmd_str[:80].replace("\n", " ")
+
+            # Write header synchronously — always visible even if cmd fails.
+            with open(self._log_path, "a") as f:
+                f.write(f"[{ts}] ▶ {short}\n")
+
+            # Run the command with its stdout / stderr appended to the log.
+            # The shell grouping  { ...; }  collects all output and >> 2>&1
+            # appends it after the header we just wrote.
+            log_q = shlex.quote(str(self._log_path))
+            wrapped = f"{{ {cmd}; }} >> {log_q} 2>&1"
+            try:
+                subprocess.Popen(
+                    wrapped,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as exc:
+                logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
+        else:
+            try:
+                subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as exc:
+                logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
