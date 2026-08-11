@@ -287,7 +287,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
     ),
     "noon": StartupPreset(
-        schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
+        schedule=[[1, 3], [1, 1], [1, 1], [1, 2]],
         labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),

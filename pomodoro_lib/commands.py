@@ -155,6 +155,14 @@ class CommandRunner:
         entries = self._commands.get(event)
         if not entries:
             return
+        # DEBUG: dump all entries being processed so we can see the merged list
+        if self._log_path:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            with open(self._log_path, "a") as f:
+                f.write(f"[{ts}] ═══ {event} — {len(entries)} entry(s) ═══\n")
+                for i, e in enumerate(entries):
+                    label = e if isinstance(e, str) else e[0][:80]
+                    f.write(f"[{ts}]   [{i}] {label}\n")
         for entry in entries:
             try:
                 self._execute(entry, context)
