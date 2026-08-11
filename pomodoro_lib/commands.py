@@ -155,23 +155,10 @@ class CommandRunner:
         entries = self._commands.get(event)
         if not entries:
             return
-        # DEBUG: dump all entries being processed so we can see the merged list
-        if self._log_path:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-            with open(self._log_path, "a") as f:
-                f.write(f"[{ts}] ═══ {event} — {len(entries)} entry(s) ═══\n")
-                for i, e in enumerate(entries):
-                    label = e if isinstance(e, str) else e[0][:80]
-                    f.write(f"[{ts}]   [{i}] {label}\n")
         for entry in entries:
-            try:
-                self._execute(entry, context)
-            except Exception:
-                # Never let one failing command break the rest of the chain.
-                logging.warning(
-                    "CommandRunner: error executing entry for event %r", event,
-                    exc_info=True,
-                )
+            self._execute(entry, context)
+        # Log after execution — can never block or break commands.
+        self._log_event(event, entries, context)
 
     # ── Config access ──────────────────────────────────────────────────────────
 
@@ -225,36 +212,26 @@ class CommandRunner:
             try:
                 cmd_str, target = entry[0], entry[1]
             except (IndexError, TypeError):
-                self._log_skip(f"malformed entry: {entry!r}")
-                return
+                return  # malformed entry, skip
 
             session = context.get("session")
             if not isinstance(session, int):
-                self._log_skip(
-                    f"no session context (session={session!r}) for: {cmd_str}"
-                )
-                return
+                return  # no session context, skip all filtered
 
             if isinstance(target, int):
+                # Exact index: fire only when session == target
                 if session != target:
-                    self._log_skip(
-                        f"session={session} ≠ target={target}: {cmd_str}"
-                    )
                     return
             elif isinstance(target, str) and target.startswith("every:"):
+                # Interval: fire when session % N == 0
                 try:
                     interval = int(target.split(":", 1)[1])
                 except (ValueError, IndexError):
-                    self._log_skip(f"bad every filter: {target!r}")
                     return
                 if interval < 1 or session % interval != 0:
-                    self._log_skip(
-                        f"every:{interval} skip session={session}: {cmd_str}"
-                    )
                     return
             else:
-                self._log_skip(f"unknown filter: {target!r}")
-                return
+                return  # unknown filter type, skip
         else:
             cmd_str = str(entry)
 
@@ -262,41 +239,38 @@ class CommandRunner:
             return
 
         cmd = self._format(cmd_str, context)
+        try:
+            subprocess.Popen(
+                cmd,
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
 
-        if self._log_path:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-            short = cmd_str.replace("\n", " ")
+    def _log_event(
+        self, event: str, entries: list, context: dict[str, object]
+    ) -> None:
+        """Write a summary to the log *after* commands have executed.
 
-            # Write header synchronously with regular file I/O (proven reliable).
-            with open(self._log_path, "a") as f:
-                f.write(f"[{ts}] ▶ {short}\n")
-
-            # Run command directly — no stdout capture, no fd tricks.
-            # Commands launch GUI apps, mpv, etc. — they just need to run.
-            try:
-                subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception as exc:
-                logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
-        else:
-            try:
-                subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception as exc:
-                logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
-
-    def _log_skip(self, reason: str) -> None:
-        """Write a skip notice to the log so the user can see what was filtered."""
+        This runs after _execute, so file I/O here can never block or break
+        the actual command execution.
+        """
         if not self._log_path:
             return
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        with open(self._log_path, "a") as f:
-            f.write(f"[{ts}] ⏭ SKIP — {reason}\n")
+        try:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            session = context.get("session", "?")
+            with open(self._log_path, "a") as f:
+                f.write(f"[{ts}] ═══ {event}  session={session}  "
+                        f"{len(entries)} cmd(s) ═══\n")
+                for i, entry in enumerate(entries):
+                    if isinstance(entry, list):
+                        cmd, target = entry[0], entry[1]
+                        status = "▶" if target == session else f"⏭ (wants {target})"
+                        f.write(f"[{ts}]   [{i}] {status}  {cmd}\n")
+                    else:
+                        f.write(f"[{ts}]   [{i}] ▶  {entry}\n")
+        except Exception:
+            pass  # logging must never break the app

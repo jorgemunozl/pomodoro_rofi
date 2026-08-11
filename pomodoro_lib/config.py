@@ -265,15 +265,15 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "night_light": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 1], [25, 1]],
-        labels=["polymath / applications",
+        labels=["polymath / applications 1/5",
             "wash teeth",
-            "blue pomodoro",
+            "blue pomodoro 2/5",
             "prepare for tomorrow",
-            "blue pomodoro",
+            "blue pomodoro 3/5",
             "log metrics",
-            "blue pomodoro",
+            "blue pomodoro 4/5",
             "last chess of the day and grab a book to read",
-            "practicing next arc night"
+            "practicing next arc night 5/5"
         ],
 
         switches=[],
@@ -287,7 +287,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
     ),
     "noon": StartupPreset(
-        schedule=[[1, 3], [1, 1], [1, 1], [1, 2]],
+        schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
         labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
@@ -342,7 +342,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                         [open_chess, 2],  # before 1st pomodoro
                     ],
                     "session_complete": [
-                        f"sleep 15 ;{open_dawn}",
+                        f"sleep 60 ;{open_dawn}",
                     ],
                 },
     ),
