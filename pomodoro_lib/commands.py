@@ -217,26 +217,36 @@ class CommandRunner:
             try:
                 cmd_str, target = entry[0], entry[1]
             except (IndexError, TypeError):
-                return  # malformed entry, skip
+                self._log_skip(f"malformed entry: {entry!r}")
+                return
 
             session = context.get("session")
             if not isinstance(session, int):
-                return  # no session context, skip all filtered
+                self._log_skip(
+                    f"no session context (session={session!r}) for: {cmd_str}"
+                )
+                return
 
             if isinstance(target, int):
-                # Exact index: fire only when session == target
                 if session != target:
+                    self._log_skip(
+                        f"session={session} ≠ target={target}: {cmd_str}"
+                    )
                     return
             elif isinstance(target, str) and target.startswith("every:"):
-                # Interval: fire when session % N == 0
                 try:
                     interval = int(target.split(":", 1)[1])
                 except (ValueError, IndexError):
+                    self._log_skip(f"bad every filter: {target!r}")
                     return
                 if interval < 1 or session % interval != 0:
+                    self._log_skip(
+                        f"every:{interval} skip session={session}: {cmd_str}"
+                    )
                     return
             else:
-                return  # unknown filter type, skip
+                self._log_skip(f"unknown filter: {target!r}")
+                return
         else:
             cmd_str = str(entry)
 
@@ -246,23 +256,18 @@ class CommandRunner:
         cmd = self._format(cmd_str, context)
 
         if self._log_path:
-            import shlex
-
             ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-            short = cmd_str[:80].replace("\n", " ")
+            short = cmd_str.replace("\n", " ")
 
-            # Write header synchronously — always visible even if cmd fails.
+            # Write header synchronously with regular file I/O (proven reliable).
             with open(self._log_path, "a") as f:
                 f.write(f"[{ts}] ▶ {short}\n")
 
-            # Run the command with its stdout / stderr appended to the log.
-            # The shell grouping  { ...; }  collects all output and >> 2>&1
-            # appends it after the header we just wrote.
-            log_q = shlex.quote(str(self._log_path))
-            wrapped = f"{{ {cmd}; }} >> {log_q} 2>&1"
+            # Run command directly — no stdout capture, no fd tricks.
+            # Commands launch GUI apps, mpv, etc. — they just need to run.
             try:
                 subprocess.Popen(
-                    wrapped,
+                    cmd,
                     shell=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -279,3 +284,11 @@ class CommandRunner:
                 )
             except Exception as exc:
                 logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
+
+    def _log_skip(self, reason: str) -> None:
+        """Write a skip notice to the log so the user can see what was filtered."""
+        if not self._log_path:
+            return
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        with open(self._log_path, "a") as f:
+            f.write(f"[{ts}] ⏭ SKIP — {reason}\n")

@@ -35,6 +35,7 @@ REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 # COMMANDS
+tabbed = 'i3-msg layout tabbed'
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
 open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/play"'
@@ -91,6 +92,7 @@ INCLUDE_DURATION_FILES = [
 # Variable pomodoro, one of 25-5, two 50-10-2, and 25-5, warm up offset time
 brain_fm = [(25, 5), (50, 10, 2), (25, 5), 110]
 shinjuku = [(50, 10, 2), (50, 20), (50, 10, 2), 72]
+shinjuku2 = [(25, 5, 3), (25, 15), (25, 5, 4), 81]
 
 
 # Pomodoro minutes, break minutes, repetitions, warm up time seconds
@@ -98,7 +100,7 @@ POMODORO_DEFAULTS = [
     ("christmas_2025-I.webm", 25, 5, 4, 77.5),
     ("dawn_2025_II.mp4", 25, 5, 8, 80),
     ("mine_2025_II.webm", 25, 5, 4, 59),
-    ("shinjuku2.mp4", 25, 5, 8, 81),
+    ("shinjuku2.mp4", shinjuku2),
     ("study.mp4", 25, 5, 5, 70),
     ("shinjuku.mp4", 25, 5, 8, 72),
     ("golden.webm", 25, 5, 4, 79),
@@ -334,7 +336,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
                         [calendly, 1],  # after 1st pomodoro
-                        [f"{open_gmail} & {open_huggingface} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}", 2],  # after 3rd pomodoro
+                        [f"{open_gmail} ; {open_huggingface} ; {open_gmail_uni} ; {slack} ; {nchat} ; {open_terminal_riced}; {tabbed}", 2],  # after 3rd pomodoro
                     ],
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro
@@ -364,7 +366,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="asd",
         commands={
                     "session_start": [
-                        open_zk
+                        calendly
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
                         [calendly, 1],  # after 1st pomodoro
