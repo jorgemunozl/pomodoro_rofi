@@ -185,6 +185,43 @@ class StartupPreset:
     )
 
 
+@dataclass
+class Chain:
+    """A sequence of pomodoro sessions that run back-to-back.
+
+    Each step is either:
+
+    * A **video filename** — e.g. ``"study.mp4"``. Runs that video using its
+      default rhythm from POMODORO_DEFAULTS (fallback 25-5 × 1). The task name
+      is derived from the video stem.
+    * A **preset name** — e.g. ``"morning"``. Runs a full STARTUP_PRESETS entry
+      with its own schedule, labels, and commands.
+    * A **``(task, item)`` tuple** — same as the two above, but with a custom
+      task name, e.g. ``("deep work", "brain_fm.mp4")``.
+
+    Example::
+
+        Chain(
+            steps=["dawn_2025_II.mp4", "study.mp4", "morning"],
+            description="dawn → study → morning preset",
+        )
+    """
+
+    steps: list
+    description: str = ""
+
+
+# ── Pomodoro chains ──────────────────────────────────────────────────────
+# Run with:  pomodoro <chain_name>
+
+CHAINS: dict[str, Chain] = {
+    # "study_morning": Chain(
+    #     steps=["dawn_2025_II.mp4", "study.mp4", "brain_fm.mp4"],
+    #     description="dawn → study → brain_fm",
+    # ),
+}
+
+
 # ── Event-driven commands ────────────────────────────────────────────────────
 # Each event maps to a list of entries.  An entry is either:
 #
@@ -295,7 +332,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         },
         notify_color="blue",
     ),
-    "noon": StartupPreset(
+    "noon_code_false": StartupPreset(
         schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
         labels=["polymath", "set-up", "applications", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
         switches=[],
@@ -317,6 +354,28 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],
         },
     ),
+    "noon": StartupPreset(
+            schedule=[[22, 3], [14,2], [10, 0.5], [6, 2]],
+            labels=["code", "set-up", "polymath", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
+            switches=[],
+            start_dir=str(ARC_SOUNDTRACK),
+            silence_secs=ARC_SILENCE_SECONDS,
+            description="noon after eat around preparing ourselves for the nap",
+            notify_color="blue",
+            commands={
+                "session_start": [
+                    open_zed
+                ],  # only once, at the very beginning (plain string)
+                "pomodoro_done": [
+                    [even_day_zk, 1],  # after 1st pomodoro
+                    [odd_day_zk, 2],  # after 2rd pomodoro
+                    [open_chess, 3]  # after 3rd pomodoro
+                ],
+                "session_complete": [
+                    f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
+                ],
+            },
+        ),
     "morning": StartupPreset(
         schedule=[
             [18, 3],

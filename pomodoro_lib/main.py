@@ -21,6 +21,7 @@ from pomodoro_lib.config import (
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
     CMD_LOG_FILE,
+    CHAINS,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
@@ -1619,21 +1620,30 @@ def _handle_start(args: list[str]) -> None:
 # ── Startup preset handler ──────────────────────────────────────────────────────
 
 
-def _handle_startup_preset(name: str) -> None:
-    """Start a pre-configured startup pomodoro session."""
-    preset = STARTUP_PRESETS[name]
+def _run_session_loop(ctrl: TimerController) -> bool:
+    """Poll a running session until it finishes or Ctrl-C stops it.
 
-    if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
-        print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    Returns True if the user interrupted the session.
+    """
+    try:
+        while STATE_FILE.exists():
+            ctrl.handle_expired()
+            line = _status_line()
+            if not line:
+                break
+            print(f"\r{line}  ", end="", flush=True)
+            time.sleep(1)
+        print()
+        return False
+    except KeyboardInterrupt:
+        print("\nInterrupted. Stopping session...")
+        ctrl.clear_state()
+        return True
 
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
+
+def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
+    """Start a startup preset session. Returns the controller (no polling)."""
+    preset = STARTUP_PRESETS[preset_name]
 
     # Merge global EVENT_COMMANDS with the preset's own commands
     preset_runner = CommandRunner.merge(
@@ -1653,15 +1663,13 @@ def _handle_startup_preset(name: str) -> None:
     # Directory → arc_mode (build shuffled playlist from directory contents)
     # File      → audio_only (play a single video's audio track)
     start_path = Path(preset.start_dir) if preset.start_dir else None
-    is_arc = start_path and start_path.is_dir()
-    is_file = start_path and start_path.is_file()
 
-    if is_arc:
+    if start_path is not None and start_path.is_dir():
         arc_mode = True
         audio_only = True
         silence_secs = preset.silence_secs
         warm_up_secs = 0
-    elif is_file:
+    elif start_path is not None and start_path.is_file():
         arc_mode = False
         audio_only = False
         silence_secs = ARC_SILENCE_SECONDS
@@ -1703,20 +1711,106 @@ def _handle_startup_preset(name: str) -> None:
         state.arc_switches = preset.switches
         state.save(STATE_FILE)
 
-    print(f"\U0001f345 {name}: {preset.description}")
+    print(f"\U0001f345 {preset_name}: {preset.description}")
+    return ctrl
 
-    try:
-        while STATE_FILE.exists():
-            ctrl.handle_expired()
-            line = _status_line()
-            if not line:
-                break
-            print(f"\r{line}  ", end="", flush=True)
-            time.sleep(1)
-        print()
-    except KeyboardInterrupt:
-        print("\nInterrupted. Stopping session...")
-        ctrl.clear_state()
+
+def _start_video_session(
+    task: str, video_name: str, tm: TaskManager
+) -> TimerController:
+    """Start a session for a single video using its default rhythm.
+
+    Falls back to 25-5 × 1 when the video has no POMODORO_DEFAULTS entry.
+    """
+    rhythm_data = _lookup_default_rhythm(video_name)
+    if rhythm_data is None:
+        work_min, break_min, total, warm_up_secs, schedule = 25, 5, 1, 0, None
+    else:
+        work_min, break_min, total, warm_up_secs, schedule = rhythm_data
+
+    video_path = _resolve_video(video_name)
+    if video_path is None:
+        raise FileNotFoundError(f"Video '{video_name}' not found in {POMO_DIR}")
+
+    ctrl = TimerController(
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
+        cmd_runner=_cmd_runner,
+    )
+
+    ctrl.start(
+        task=task,
+        video=str(video_path),
+        work_min=work_min,
+        break_min=break_min,
+        total=total,
+        warm_up_secs=warm_up_secs,
+        schedule=schedule or None,
+    )
+
+    print(f"\U0001f345 {task}: {video_name} — {work_min}/{break_min} × {total}")
+    return ctrl
+
+
+def _handle_chain(name: str) -> None:
+    """Run a Chain: each step starts when the previous one completes."""
+    chain = CHAINS[name]
+
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    print(f"⛓  Chain: {name}")
+    if chain.description:
+        print(f"   {chain.description}")
+
+    for i, step in enumerate(chain.steps, 1):
+        # Optional (task, item) tuple, otherwise plain video/preset name
+        if isinstance(step, tuple):
+            task, item = step
+        else:
+            task, item = None, step
+
+        if item in STARTUP_PRESETS:
+            print(f"\n⛓  [{i}/{len(chain.steps)}] Preset: {item}")
+            ctrl = _start_preset_session(item, tm)
+        else:
+            video_name = str(item)
+            task_name = task or Path(video_name).stem
+            print(f"\n⛓  [{i}/{len(chain.steps)}] Video: {video_name}")
+            ctrl = _start_video_session(task_name, video_name, tm)
+
+        interrupted = _run_session_loop(ctrl)
+        if interrupted:
+            print(f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}.")
+            return
+
+    print(f"\n⛓  Chain '{name}' complete! \U0001f389")
+
+
+def _handle_startup_preset(name: str) -> None:
+    """Start a pre-configured startup pomodoro session."""
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        print(
+            f"Error: A session is already active ({state.task}). "
+            f"Stop it first with 'pomodoro stop'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    tm.init_defaults(DEFAULT_TASKS)
+
+    ctrl = _start_preset_session(name, tm)
+    _run_session_loop(ctrl)
 
 
 # ── Subcommand dispatch ───────────────────────────────────────────────────────
@@ -1880,9 +1974,11 @@ def _run_subcommand(args: list[str]) -> None:
         SKIP_RANDOM_FILE.touch()
     elif cmd in STARTUP_PRESETS:
         _handle_startup_preset(cmd)
+    elif cmd in CHAINS:
+        _handle_chain(cmd)
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|random|startup|startup2|...}",
+            "usage: pomodoro {status|toggle|stop|next|start|random|log|<chain>|<preset>}",
             file=sys.stderr,
         )
         sys.exit(1)
