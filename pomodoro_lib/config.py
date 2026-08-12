@@ -1,9 +1,10 @@
 """Paths, presets, and defaults for the pomodoro timer."""
+from posix import eventfd
 import tempfile
 from pathlib import Path
+from datetime import datetime
 
-# ── Project root ──────────────────────────────────────────────────────────────
-
+# 1. Get the current day of the month
 
 def _find_project_root() -> Path:
     """Locate the repo root (parent of pomodoro_lib/)."""
@@ -35,13 +36,13 @@ REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 # COMMANDS
-tabbed = 'i3-msg layout tabbed'
+tabbed = 'alacritty -e "i3-msg layout tabbed"'
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
 open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/play"'
 open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
-open_terminal_riced = 'i3-msg "workspace --no-auto-back-and-forth >_" && alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
+open_terminal_riced = 'alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 cleaning = "imv -f ~/Videos/clean.jpg"
 open_dawn= 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
 open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
@@ -55,6 +56,13 @@ open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox
 open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
 slack='slack'
 nchat='alacritty -e nchat'
+
+current_day = datetime.now().day
+
+even_day = (current_day % 2 == 0)
+
+even_day_zk = even_day * open_zk + (not even_day) * calendly
+odd_day_zk = (not even_day) * open_zk + even_day * calendly
 
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
@@ -71,6 +79,7 @@ BELL_30_PLAYED = TMP_DIR / "pomo_bell_30_played"
 BELL_BEGIN_PLAYED = TMP_DIR / "pomo_bell_begin_played"
 WORK_BELL_PLAYED = TMP_DIR / "pomo_work_bell_played"
 FINISH_PLAYED = TMP_DIR / "pomo_finish_played"
+TRANSITION_LOCK = TMP_DIR / "pomo_transition_lock"
 MPV_SOCKET = TMP_DIR / "mpvsocket"
 
 TASKS_FILE = DATA_DIR / "tasks"
@@ -282,7 +291,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         description="night good one, from seven 7.40 to 7.55 turn it on",
         commands={
             "session_complete": [f"{open_chess}, sleep 420, {shutdown_command}"],
-            "session_start": [calendly],
+            "session_start": [even_day_zk],
         },
         notify_color="blue",
     ),
@@ -296,10 +305,10 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
         commands={
             "session_start": [
-                open_zk
+                even_day_zk
             ],  # only once, at the very beginning (plain string)
             "pomodoro_done": [
-                [calendly, 1],  # after 1st pomodoro
+                [odd_day_zk, 1],  # after 1st pomodoro
                 [open_zed, 2],  # after 2rd pomodoro
                 [open_chess, 3]  # after 3rd pomodoro
             ],
@@ -311,9 +320,9 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     "morning": StartupPreset(
         schedule=[
             [18, 3],
-            [17, 2],
-            [10, 1],
-            [5, 4],
+            [17, 5],
+            [10, 3],
+            [4, 0],
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
         labels=[
             "polymath",
@@ -332,11 +341,11 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="yellow",
         commands={
                     "session_start": [
-                        open_zk
+                        even_day_zk
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
-                        [calendly, 1],  # after 1st pomodoro
-                        [f"{open_gmail} ; {open_huggingface} ; {open_gmail_uni} ; {slack} ; {nchat} ; {open_terminal_riced}; {tabbed}", 2],  # after 3rd pomodoro
+                        [odd_day_zk, 1],  # after 1st pomodoro
+                        [f"{open_gmail} ; {open_huggingface}; {open_git} ; {open_gmail_uni} ; {slack} ; {nchat} ; {open_terminal_riced}; {tabbed}", 2],  # after 3rd pomodoro
                     ],
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro

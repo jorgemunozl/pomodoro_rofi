@@ -28,6 +28,7 @@ from pomodoro_lib.config import (
     REFLECTION_SECS,
     STATE_FILE,
     TMP_DIR,
+    TRANSITION_LOCK,
     WORK_BELL_PLAYED,
 )
 from pomodoro_lib.state import PomodoroState
@@ -690,6 +691,20 @@ class TimerController:
         """Work → break: update state, notify. Does NOT start a timer.
         The video keeps playing uninterrupted across work/break cycles."""
 
+        # Idempotency guard: the timer daemon thread and the polybar-driven
+        # handle_expired can race and both trigger this transition. Only the
+        # first caller wins; the second returns immediately.
+        try:
+            TRANSITION_LOCK.touch(exist_ok=False)
+        except FileExistsError:
+            return
+
+        try:
+            self._transition_work_to_break_locked()
+        finally:
+            TRANSITION_LOCK.unlink(missing_ok=True)
+
+    def _transition_work_to_break_locked(self) -> None:
         idx = self.state.current - 1  # 0-based index of the session just completed
 
         # Look up the break_min for this session from schedule, if present
@@ -761,6 +776,20 @@ class TimerController:
         """Break → work: update state, notify. Does NOT start a timer.
         The video is already playing from the initial `start()` call."""
 
+        # Idempotency guard: the timer daemon thread and the polybar-driven
+        # handle_expired can race and both trigger this transition. Only the
+        # first caller wins; the second returns immediately.
+        try:
+            TRANSITION_LOCK.touch(exist_ok=False)
+        except FileExistsError:
+            return
+
+        try:
+            self._transition_break_to_work_locked()
+        finally:
+            TRANSITION_LOCK.unlink(missing_ok=True)
+
+    def _transition_break_to_work_locked(self) -> None:
         idx = self.state.current - 1  # 0-based index of the upcoming session
 
         # Look up work_min for this session from schedule, if present
