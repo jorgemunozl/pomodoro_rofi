@@ -56,13 +56,20 @@ open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox
 open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
 slack='slack'
 nchat='alacritty -e nchat'
+nets = f"{open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced} & {tabbed}"
+
+
 
 current_day = datetime.now().day
 
 even_day = (current_day % 2 == 0)
 
 even_day_zk = even_day * open_zk + (not even_day) * calendly
+even_day_label = even_day * "polymath" + (not even_day) * "applications"
+
 odd_day_zk = (not even_day) * open_zk + even_day * calendly
+odd_day_label = (not even_day) * "polymath" + even_day * "applications"
+
 
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
@@ -215,10 +222,18 @@ class Chain:
 # Run with:  pomodoro <chain_name>
 
 CHAINS: dict[str, Chain] = {
-    # "study_morning": Chain(
-    #     steps=["dawn_2025_II.mp4", "study.mp4", "brain_fm.mp4"],
-    #     description="dawn → study → brain_fm",
-    # ),
+    "study_morning": Chain(
+        steps=["dawn_2025_II.mp4", "study.mp4", "brain_fm.mp4", "morning"],
+        description="dawn → study → brain_fm → morning preset",
+    ),
+    "deep_afternoon": Chain(
+        steps=[
+            ("problem solving", "mine_2025_II.webm"),
+            ("review", "shinjuku2.mp4"),
+            "afternoon",
+        ],
+        description="problem solving → review → afternoon preset",
+    ),
 }
 
 
@@ -311,7 +326,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "night_light": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 1], [25, 1]],
-        labels=["polymath / applications 1/5",
+        labels=[f"{even_day_label} 1/5",
             "wash teeth",
             "blue pomodoro 2/5",
             "prepare for tomorrow",
@@ -378,15 +393,15 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         ),
     "morning": StartupPreset(
         schedule=[
-            [18, 3],
-            [17, 5],
-            [10, 3],
-            [4, 0],
+            [22, 3], # 25
+            [15, 5], # 20
+            [10, 3], # 13
+            [2, 0], # 2
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
         labels=[
-            "polymath",
+            even_day_label,
             "set-up",
-            "applications",
+            odd_day_label,
             "vault",
             "chess/review",
             "chess review",
@@ -404,7 +419,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                     ],  # only once, at the very beginning (plain string)
                     "pomodoro_done": [
                         [odd_day_zk, 1],  # after 1st pomodoro
-                        [f"{open_gmail} ; {open_huggingface}; {open_git} ; {open_gmail_uni} ; {slack} ; {nchat} ; {open_terminal_riced}; {tabbed}", 2],  # after 3rd pomodoro
+                        [nets, 2],  # after 3rd pomodoro
                     ],
                     "pomodoro_begin": [
                         [open_chess, 2],  # before 1st pomodoro
@@ -442,7 +457,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                         [open_chess, 3]  # after 3rd pomodoro
                     ],
                     "session_complete": [
-                        f"sleep 1 ;{open_tired} ; {open_shinjuku_2}",
+                        f"sleep 2; {open_dawn}",
                     ],
                 },
         notify_phases={

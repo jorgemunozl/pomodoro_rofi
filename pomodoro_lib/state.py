@@ -35,6 +35,9 @@ class PomodoroState:
     notify_phases: dict = field(
         default_factory=dict
     )  # per-phase overrides keyed by phase name
+    commands: dict = field(
+        default_factory=dict
+    )  # merged event commands for this session
 
     @property
     def is_active(self) -> bool:

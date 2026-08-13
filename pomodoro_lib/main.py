@@ -55,6 +55,21 @@ from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_be
 # ── Shared command runner (wired from EVENT_COMMANDS) ────────────────────────
 _cmd_runner = CommandRunner(EVENT_COMMANDS, log_path=CMD_LOG_FILE)
 
+
+def _runner_for_active_session() -> CommandRunner:
+    """Return the command runner for the currently active session.
+
+    Preset sessions persist their merged event commands in STATE_FILE so that
+    OTHER processes (polybar's ``pomodoro status``, ``pomodoro next``) can
+    rebuild the correct preset-aware runner when they handle phase transitions.
+    Falls back to the global EVENT_COMMANDS runner.
+    """
+    if STATE_FILE.exists():
+        state = PomodoroState.load(STATE_FILE)
+        if state.commands:
+            return CommandRunner(state.commands, log_path=CMD_LOG_FILE)
+    return _cmd_runner
+
 # ── Polybar status line ───────────────────────────────────────────────────────
 
 
@@ -94,7 +109,14 @@ def _status_line() -> str:
     # Handle any expired phases BEFORE computing the status line.
     # This is the *reliable* transition mechanism – the daemon timer
     # threads started by the UI are only a best-effort optimisation.
-    ctrl = TimerController(cmd_runner=_cmd_runner)
+    # Rebuild the preset-aware runner from state so preset commands fire
+    # even when this transition is handled by a different process (polybar).
+    runner = _runner_for_active_session()
+    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
+    ctrl = TimerController(
+        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
+        cmd_runner=runner,
+    )
     ctrl.handle_expired()
 
     # Re-check after transition (e.g. the session may have completed)
@@ -145,7 +167,7 @@ def _status_line() -> str:
             try:
                 BELL_30_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_30_FILE)
-                _cmd_runner.run(
+                runner.run(
                     EVENT_BELL_30,
                     task=state.task,
                     session=state.current - 2,  # 0-based: break after session N
@@ -157,7 +179,7 @@ def _status_line() -> str:
             try:
                 BELL_BEGIN_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_BEGIN_FILE)
-                _cmd_runner.run(
+                runner.run(
                     EVENT_BELL_BEGIN,
                     task=state.task,
                     session=state.current - 2,  # 0-based: break after session N
@@ -177,7 +199,7 @@ def _status_line() -> str:
             try:
                 WORK_BELL_PLAYED.touch(exist_ok=False)
                 play_bell(BELL_END_FILE)
-                _cmd_runner.run(
+                runner.run(
                     EVENT_BELL_END,
                     task=state.task,
                     session=state.current - 1,  # 0-based: work session N
@@ -1705,11 +1727,13 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
         notify_phases=preset.notify_phases or {},
     )
 
-    # Configure audio switches if any
+    # Persist merged commands + audio switches into state so OTHER processes
+    # (polybar status, pomodoro next) rebuild the same preset-aware runner.
+    state = PomodoroState.load(STATE_FILE)
+    state.commands = preset_runner._commands
     if preset.switches:
-        state = PomodoroState.load(STATE_FILE)
         state.arc_switches = preset.switches
-        state.save(STATE_FILE)
+    state.save(STATE_FILE)
 
     print(f"\U0001f345 {preset_name}: {preset.description}")
     return ctrl
@@ -1954,7 +1978,7 @@ def _handle_log() -> None:
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
-    ctrl = TimerController(cmd_runner=_cmd_runner)
+    ctrl = TimerController(cmd_runner=_runner_for_active_session())
 
     if cmd == "status":
         print(_status_line())
