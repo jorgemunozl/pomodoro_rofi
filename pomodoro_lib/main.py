@@ -27,6 +27,7 @@ from pomodoro_lib.config import (
     DEFAULT_TASKS,
     DURATION_PRESETS,
     EVENT_COMMANDS,
+    EXTRA_WORK_SECS,
     HISTORY_FILE,
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
@@ -124,7 +125,9 @@ def _status_line() -> str:
         return ""
 
     state = PomodoroState.load(STATE_FILE)
-    work_total = state.work_min * 60
+    # Effective work length includes the artificial extra seconds, so the
+    # countdown displays 25:03 instead of 25:00 at phase start.
+    work_total = state.work_min * 60 + EXTRA_WORK_SECS
 
     if PAUSE_FILE.exists():
         raw = int(PAUSE_FILE.read_text().strip())

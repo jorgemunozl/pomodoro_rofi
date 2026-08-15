@@ -1,5 +1,4 @@
 """Paths, presets, and defaults for the pomodoro timer."""
-from posix import eventfd
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -33,23 +32,33 @@ ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
+EXTRA_WORK_SECS = 3  # extra seconds added to every work phase (25:00 → 25:03)
+
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
 # COMMANDS
 tabbed = 'alacritty -e "i3-msg layout tabbed"'
+
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+open_social = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=social"'
+open_network = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=networking"'
+
 open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/play"'
 open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_terminal_riced = 'alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
+
 cleaning = "imv -f ~/Videos/clean.jpg"
+
 open_dawn= 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
 open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
 open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2.mp4'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
+
 i3_tab = 'i3-msg  '
 shutdown_command = "python3 ~/dotfiles/alarm/alarm.py"
+
 calendly ='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=canvas%2Fdays-of-the-week-researchy"'
 open_gmail = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/0/#inbox"'
 open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/1/#inbox"'
@@ -58,17 +67,19 @@ slack='slack'
 nchat='alacritty -e nchat'
 nets = f"{open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced} & {tabbed}"
 
-
-
 current_day = datetime.now().day
 
 even_day = (current_day % 2 == 0)
 
 even_day_zk = even_day * open_zk + (not even_day) * calendly
+even_day_social = even_day * open_social + (not even_day) * open_network
 even_day_label = even_day * "polymath" + (not even_day) * "applications"
 
 odd_day_zk = (not even_day) * open_zk + even_day * calendly
+odd_day_social = (not even_day) * open_social + even_day * open_network
 odd_day_label = (not even_day) * "polymath" + even_day * "applications"
+
+even_day_social_label = even_day * "social" + (not even_day) * "networking"
 
 
 # ── Runtime state files ────────────────────────────────────────────────────
@@ -222,8 +233,8 @@ class Chain:
 # Run with:  pomodoro <chain_name>
 
 CHAINS: dict[str, Chain] = {
-    "study_morning": Chain(
-        steps=["dawn_2025_II.mp4", "study.mp4", "brain_fm.mp4", "morning"],
+    "dawn_deep": Chain(
+        steps=["morning", "dawn_2025_II.mp4", "brain_fm.mp4"],
         description="dawn → study → brain_fm → morning preset",
     ),
     "deep_afternoon": Chain(
@@ -272,7 +283,7 @@ CHAINS: dict[str, Chain] = {
 # ── Flags ─────────────────────────────────────────────────────────────────────
 # Toggle these to enable/disable common behaviours without editing every preset.
 
-ANNOUNCE_TIME_ON_DONE: bool = False
+ANNOUNCE_TIME_ON_DONE: bool = True
 """When True, speaks the current time via gtts-cli after every pomodoro.
 
 This is injected into the global EVENT_COMMANDS under ``pomodoro_done``,
@@ -308,42 +319,37 @@ EVENT_COMMANDS = cmds.build()
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
-    "night_hardcore": StartupPreset(
+    "night_light": StartupPreset(
         schedule=[
-            [15, 2],
-            [15, 1],
-            [25, 5],
-            [25, 5],
-            [25, 5],
-            [25, 0],
+            [25, 10],
         ],  # TODO: Warm up time lacking
-        labels=["polymath", "set-up", "applications"],
-        switches=[[3, str(POMO_DIR / "christmas_2025-I.webm"), False]],
+        labels=[f"{even_day_social_label}", "prepare to sleep"],
+        switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_STARTUP,
+        # commands={ turn } turn off
         notify_color="blue",
-        description="night hardcore",
+        description="night light when arrive tired",
     ),
-    "night_light": StartupPreset(
+    "night_hardcore": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 1], [25, 1]],
-        labels=[f"{even_day_label} 1/5",
-            "wash teeth",
+        labels=[f"{even_day_social_label} 1/5",
+            "wash teeth 1/5",
             "blue pomodoro 2/5",
-            "prepare for tomorrow",
+            "prepare for tomorrow 2/5",
             "blue pomodoro 3/5",
-            "log metrics",
+            "log metrics 3/5",
             "blue pomodoro 4/5",
-            "last chess of the day and grab a book to read",
+            "last chess of the day and grab a book to read 4/5",
             "practicing next arc night 5/5"
         ],
-
         switches=[],
         start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="night good one, from seven 7.40 to 7.55 turn it on",
+        description="night good one, when all the day at home, and have more energy than normal",
         commands={
             "session_complete": [f"{open_chess}, sleep 420, {shutdown_command}"],
-            "session_start": [even_day_zk],
+            "session_start": [even_day_social],
         },
         notify_color="blue",
     ),
@@ -370,8 +376,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         },
     ),
     "noon": StartupPreset(
-            schedule=[[22, 3], [14,2], [10, 0.5], [6, 2]],
-            labels=["code", "set-up", "polymath", "prepare code","coding", "prepare chess","six min chess", "plan plan"],
+            schedule=[
+                [23, 3],  # 26
+                [18, 2],  # 20
+                [5, 1],  # 6
+                [6, 2]
+            ], # 8
+            labels=["code", "set-up", f"{even_day_label}", "set-up", f"{odd_day_label}", "prepare chess","six min chess", "plan plan"],
             switches=[],
             start_dir=str(ARC_SOUNDTRACK),
             silence_secs=ARC_SILENCE_SECONDS,

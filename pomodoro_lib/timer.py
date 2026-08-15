@@ -16,6 +16,7 @@ from pomodoro_lib.config import (
     BELL_30_PLAYED,
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
+    EXTRA_WORK_SECS,
     FINISH_FILE,
     FINISH_PLAYED,
     INCLUDE_DURATION_FILES,
@@ -453,7 +454,7 @@ class TimerController:
         self.stop()
         # Fresh start: clear the finish guard from any previous session
         FINISH_PLAYED.unlink(missing_ok=True)
-        total_first_secs = warm_up_secs + work_min * 60
+        total_first_secs = warm_up_secs + work_min * 60 + EXTRA_WORK_SECS
         self.state = PomodoroState(
             task=task,
             end_ts=time.time() + total_first_secs,
@@ -613,7 +614,7 @@ class TimerController:
             return ""
 
         state = PomodoroState.load(STATE_FILE)
-        work_total = state.work_min * 60
+        work_total = state.work_min * 60 + EXTRA_WORK_SECS
 
         if PAUSE_FILE.exists():
             raw = int(PAUSE_FILE.read_text().strip())
@@ -797,7 +798,7 @@ class TimerController:
             self.state.work_min = self.state.schedule[idx][0]
 
         self.state.phase = "work"
-        self.state.end_ts = time.time() + self.state.work_min * 60
+        self.state.end_ts = time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
 
         # Switch ARC audio source mid-session if configured
         # Format: [at_pomodoro, path, arc_mode]
@@ -829,7 +830,10 @@ class TimerController:
                             if warm_up:
                                 self.state.warm_up_secs = int(warm_up)
                                 self.state.end_ts = (
-                                    time.time() + warm_up + self.state.work_min * 60
+                                    time.time()
+                                    + warm_up
+                                    + self.state.work_min * 60
+                                    + EXTRA_WORK_SECS
                                 )
                             break
 
