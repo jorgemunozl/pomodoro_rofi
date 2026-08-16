@@ -32,7 +32,7 @@ ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
-EXTRA_WORK_SECS = 3  # extra seconds added to every work phase (25:00 → 25:03)
+EXTRA_WORK_SECS = 1  # extra seconds added to every work phase (25:00 → 25:03)
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 

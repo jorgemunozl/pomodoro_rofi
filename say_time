@@ -57,10 +57,10 @@ def announce(directory: Path, volume: int, t: time.struct_time | None = None) ->
     print(f"{time.strftime('%H:%M:%S')} {status} {clip.name}", flush=True)
 
 
-def seconds_to_next_boundary(now: float | None = None) -> float:
-    """Seconds until the next 5-minute mark (0 if exactly on one)."""
+def next_boundary(now: float | None = None) -> int:
+    """Epoch second of the next 5-minute mark (>= *now*)."""
     now = int(now if now is not None else time.time())
-    return (-now) % INTERVAL
+    return now + (-now) % INTERVAL
 
 
 def main() -> None:
@@ -102,19 +102,21 @@ def main() -> None:
         announce(directory, args.volume)
         return
 
-    # Main loop: wait for the next 5-minute mark, announce, repeat
-    delay = seconds_to_next_boundary()
-    if delay > 0:
-        next_at = time.localtime(time.time() + delay)
-        print(f"say_time: next announcement at "
-              f"{time.strftime('%I:%M', next_at)} {time.strftime('%p', next_at)}"
-              f" — Ctrl+C to stop", flush=True)
+    # Main loop: announce at each 5-minute mark, then advance to the next one.
+    target = next_boundary()
+    next_at = time.localtime(target)
+    print(f"say_time: next announcement at "
+          f"{time.strftime('%I:%M', next_at)} {time.strftime('%p', next_at)}"
+          f" — Ctrl+C to stop", flush=True)
     try:
         while True:
-            delay = seconds_to_next_boundary()
+            delay = target - time.time()
             if delay > 0:
                 time.sleep(delay)
             announce(directory, args.volume)
+            # Jump to the next mark, skipping any we slept through, so a late
+            # wake-up never re-announces the same mark in a tight loop.
+            target = max(target + INTERVAL, next_boundary())
     except KeyboardInterrupt:
         print("\nsay_time: stopped")
 
