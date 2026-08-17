@@ -729,13 +729,17 @@ class TimerController:
                 session=self.state.current - 1,
             )
 
-            # Fire pomodoro_done so indexed commands (push-ups etc.) also run here
+            # Fire pomodoro_done so indexed commands also run for the final
+            # pomodoro. `session` is 1-based here (matching the branch below):
+            # the last pomodoro is `current` (== total), not `current - 1`.
+            # Using `current - 1` would reuse the previous pomodoro's index and
+            # fire commands like `[open_chess, 3]` twice.
             self._cmd_runner.run(
                 "pomodoro_done",
                 task=self.state.task,
                 work_min=self.state.work_min,
                 break_min=self.state.break_min,
-                session=self.state.current - 1,
+                session=self.state.current,
                 total=self.state.total,
                 phase=self.state.phase,
             )

@@ -20,8 +20,8 @@ from pomodoro_lib.config import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
-    CMD_LOG_FILE,
     CHAINS,
+    CMD_LOG_FILE,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
@@ -70,6 +70,7 @@ def _runner_for_active_session() -> CommandRunner:
         if state.commands:
             return CommandRunner(state.commands, log_path=CMD_LOG_FILE)
     return _cmd_runner
+
 
 # ── Polybar status line ───────────────────────────────────────────────────────
 
@@ -1672,7 +1673,8 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
 
     # Merge global EVENT_COMMANDS with the preset's own commands
     preset_runner = CommandRunner.merge(
-        EVENT_COMMANDS, getattr(preset, "commands", None),
+        EVENT_COMMANDS,
+        getattr(preset, "commands", None),
         log_path=CMD_LOG_FILE,
     )
 
@@ -1848,8 +1850,8 @@ def _handle_random() -> None:
 
     Detaches into the background.  Run ``pomodoro skip_random`` to skip
     to the next video, or ``pomodoro stop`` to quit."""
-    import random
     import os
+    import random
 
     # ── Fork to background ─────────────────────────────────────────────────
     pid = os.fork()
@@ -1897,7 +1899,10 @@ def _handle_random() -> None:
         else:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
 
-        print(f"\n🎲 {v.name}  —  {work_min}min × {total}  (pomodoro skip_random to skip)", flush=True)
+        print(
+            f"\n🎲 {v.name}  —  {work_min}min × {total}  (pomodoro skip_random to skip)",
+            flush=True,
+        )
 
         ctrl = TimerController(
             on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
