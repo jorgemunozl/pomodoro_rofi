@@ -805,9 +805,10 @@ class TimerController:
         self.state.end_ts = time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
 
         # Switch ARC audio source mid-session if configured
-        # Format: [at_pomodoro, path, arc_mode]
+        # Format: [at_pomodoro, path, arc_mode?]
         #   arc_mode=True  → ARC directory (build playlist)
         #   arc_mode=False → regular video file
+        # When omitted, infer it from the path (directory → True, file → False).
         if self.state.arc_switches:
             at, target_path = (
                 self.state.arc_switches[0][0],
@@ -816,7 +817,7 @@ class TimerController:
             target_arc = (
                 self.state.arc_switches[0][2]
                 if len(self.state.arc_switches[0]) >= 3
-                else True
+                else Path(target_path).is_dir()
             )
             if self.state.current >= at:
                 kill_mpv()

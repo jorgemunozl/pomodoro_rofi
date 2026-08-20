@@ -27,6 +27,7 @@ BELL_END_FILE = SOUNDS_DIR / "bell_end.mp3"
 PUSH_UPS_FILE = SOUNDS_DIR / "push_ups.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current-arc"
+ARC_CLEANING = Path.home() / "Videos" / "workout" / "rollouts" / "cleaning"
 ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
 
@@ -34,7 +35,7 @@ ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
-EXTRA_WORK_SECS = 2  # extra seconds added to every work phase (25:00 → 25:03)
+EXTRA_WORK_SECS = 2.5  # extra seconds added to every work phase (25:00 → 25:03)
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
@@ -46,7 +47,7 @@ open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr
 open_social = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=social"'
 open_network = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=networking"'
 
-open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/play"'
+open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/home"'
 open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_uta = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && mpv --fullscreen /home/jorge/Videos/kamado.webm'
@@ -242,13 +243,9 @@ CHAINS: dict[str, Chain] = {
         steps=["morning", "dawn_2025_II.mp4", "brain_fm.mp4"],
         description="dawn → study → brain_fm → morning preset",
     ),
-    "deep_afternoon": Chain(
-        steps=[
-            ("problem solving", "mine_2025_II.webm"),
-            ("review", "shinjuku2.mp4"),
-            "afternoon",
-        ],
-        description="problem solving → review → afternoon preset",
+    "cleaning_full": Chain(
+        steps=["cleaning", "mine_2025_II.webm"],
+        description="if you make this chain the house cleaning by itself",
     ),
 }
 
@@ -392,23 +389,23 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "noon": StartupPreset(
         schedule=[
-            [23, 3],  # 26
-            [18, 2],  # 20
-            [5, 1],  # 6
-            [6, 2],
+            [2, 3],  # 5
+            [23, 18],  # 41
+            [10, 1],  # 11
+            [3, 0],  # 3
         ],
         labels=[
-            "code",
-            "set-up",
-            f"{even_day_label}",
-            "set-up",
-            f"{odd_day_label}",
-            "prepare chess",
-            "six min chess",
-            "plan plan",
+            "pray",  # 2
+            "set-up",  # 3
+            "code",  # 23
+            f"{even_day_label}",  # 18
+            f"{odd_day_label}",  # 5
+            "prepare chess",  # 1
+            "blitz chess",  # 6
+            "prepare for the afternoon",
         ],
         switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
         notify_color="blue",
@@ -428,23 +425,23 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "morning": StartupPreset(
         schedule=[
+            [2, 1],  # 3
             [22, 3],  # 25
             [15, 5],  # 20
-            [10, 3],  # 13
-            [2, 0],  # 2
+            [10, 2],  # 12
         ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
         labels=[
+            "pray",
             even_day_label,
-            "set-up",
+            "clean",
             odd_day_label,
             "vault",
             "chess/review",
             "chess review",
             "stretch",
-            "plan, plan",
         ],
         switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
         description="morning winter ritual",
         notify_color="yellow",
@@ -511,8 +508,8 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         schedule=[[25, 0]],
         labels=["cleaning, washing"],
         switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=20,
+        start_dir=str(ARC_CLEANING),
+        silence_secs=0,
         description="cleaning",
         commands={
             "session_start": [cleaning],
