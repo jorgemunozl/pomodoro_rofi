@@ -620,7 +620,7 @@ class TimerController:
             raw = int(PAUSE_FILE.read_text().strip())
             if state.phase == "work" and raw > work_total:
                 # Paused during warm-up
-                secs = raw - work_total
+                secs = int(raw - work_total)
                 icon = "⏸"
             else:
                 secs = raw
@@ -635,7 +635,7 @@ class TimerController:
             raw = state.remaining_seconds
             if raw > work_total:
                 # Still in warm-up
-                secs = raw - work_total
+                secs = int(raw - work_total)
                 icon = "🔥"
             else:
                 secs = raw

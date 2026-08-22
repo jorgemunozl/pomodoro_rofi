@@ -389,16 +389,19 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "noon": StartupPreset(
         schedule=[
-            [2, 3],  # 5
-            [23, 18],  # 41
-            [10, 1],  # 11
-            [3, 0],  # 3
+            [3, 1],  # 4
+            [20, 4],  # 24
+            [18, 1],  # 19
+            [5, 1],  # 11
+            [6, 1],  # 7 total 65
         ],
         labels=[
             "pray",  # 2
             "set-up",  # 3
             "code",  # 23
+            f"prepare {even_day_label} and nets",
             f"{even_day_label}",  # 18
+            f"prepare {odd_day_label}",
             f"{odd_day_label}",  # 5
             "prepare chess",  # 1
             "blitz chess",  # 6
@@ -414,10 +417,11 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                 open_zed
             ],  # only once, at the very beginning (plain string)
             "pomodoro_done": [
-                [even_day_zk, 1],  # after 1st pomodoro
-                [odd_day_zk, 2],  # after 2rd pomodoro
-                [open_chess, 3],  # after 3rd pomodoro
+                [nets, 2],  # after 2nd pomodoro
+                [odd_day_zk, 3],  # after 3rd pomodoro
+                [open_chess, 4],  # after 4rd pomodoro
             ],
+            "pomodoro_begin": [[even_day_zk, 2]],
             "session_complete": [
                 f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
             ],
@@ -425,20 +429,20 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "morning": StartupPreset(
         schedule=[
-            [2, 1],  # 3
-            [22, 3],  # 25
+            [2, 3],  # 3
+            [22, 1],  # 25
             [15, 5],  # 20
             [10, 2],  # 12
-        ],  # Plan means also review the weekly days from obsidian, so give more time, 1.05 I dont like that
+        ],
         labels=[
             "pray",
+            "prepare myself for the day",
             even_day_label,
-            "clean",
+            "application prepare",
             odd_day_label,
-            "vault",
-            "chess/review",
-            "chess review",
-            "stretch",
+            "net",
+            "chess",
+            "study my chess",
         ],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
@@ -450,11 +454,11 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                 even_day_zk
             ],  # only once, at the very beginning (plain string)
             "pomodoro_done": [
-                [odd_day_zk, 1],  # after 1st pomodoro
-                [nets, 2],  # after 3rd pomodoro
+                [odd_day_zk, 2],  # after 1st pomodoro
+                [nets, 3],  # after 3rd pomodoro
             ],
             "pomodoro_begin": [
-                [open_chess, 2],  # before 1st pomodoro
+                [open_chess, 3],  # before 1st pomodoro
             ],
             "session_complete": [
                 f"sleep 60 ;{open_dawn}",

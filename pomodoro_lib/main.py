@@ -133,7 +133,7 @@ def _status_line() -> str:
     if PAUSE_FILE.exists():
         raw = int(PAUSE_FILE.read_text().strip())
         if state.phase == "work" and raw > work_total:
-            secs = raw - work_total  # remaining warm-up when paused
+            secs = int(raw - work_total)  # remaining warm-up when paused
         else:
             secs = raw
         icon = "⏸"
@@ -146,7 +146,7 @@ def _status_line() -> str:
     else:
         raw = state.remaining_seconds
         if raw > work_total:
-            secs = raw - work_total  # still in warm-up
+            secs = int(raw - work_total)  # still in warm-up
             icon = "🔥"
         else:
             secs = raw
