@@ -77,6 +77,15 @@ current_day = datetime.now().day
 
 even_day = current_day % 2 == 0
 
+if current_day % 3 == 0:
+    choseed = open_dawn
+elif current_day % 3 == 1:
+    choseed = and # arc pomodoro
+else:
+    choseed = # golden morning
+
+morning_pomodoro = choosed
+
 even_day_zk = even_day * open_zk + (not even_day) * calendly
 even_day_social = even_day * open_social + (not even_day) * open_network
 even_day_label = even_day * "polymath" + (not even_day) * "applications"
@@ -333,6 +342,27 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         notify_color="blue",
         description="night light when arrive tired",
     ),
+    "night_blue": StartupPreset(
+        schedule=[[25, 5], [25, 5], [25, 5], [25, 5]],  # 2:30 min
+        labels=[
+            "pray, journal 1/4",
+            "prepare for tomorrow break 1/4",
+            "blue pomodoro, personal vault 2/4",
+            "log metrics 2/4",
+            "blue pomodoro 3/4",
+            "chess pomodoro break 3/4",
+            "practicing next arc night 4/4",
+        ],
+        switches=[],
+        start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="night when at home, begin programatically at 7:00 pm finish at 9:30, thus wake up at 5:00",
+        commands={
+            "session_complete": [f"sleep 80; {shutdown_command}"],
+            "session_start": [f"{even_day_social}"],  # Tanjiro Sound before begin!
+        },
+        notify_color="blue",
+    ),
     "night_hardcore": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 5], [25, 5]],  # 2:30 min
         labels=[
@@ -389,6 +419,40 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "noon": StartupPreset(
         schedule=[
+            [5, 3],  # 8
+            [16, 4],  # 20
+            [16, 4],  # 20
+            [12, 0],  # 12
+        ],
+        labels=[
+            "pray meditation",  # 3
+            "set-up for first session",  # 3
+            "code/polymath first session",  # 17
+            "first break",  # 4
+            "code/polymath second session",  # 17
+            "second and last break, prepare for the afternoon",  # 4
+            "code/polymath third session",  # 17
+            "",
+        ],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
+        notify_color="blue",
+        commands={
+            "session_start": [
+                open_zed
+            ],  # only once, at the very beginning (plain string)
+            "pomodoro_done": [
+                [open_zk, 1],  # after 3rd pomodoro
+            ],
+            "session_complete": [
+                f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
+            ],
+        },
+    ),
+    "noon_old": StartupPreset(
+        schedule=[
             [3, 1],  # 4
             [20, 4],  # 24
             [18, 1],  # 19
@@ -399,7 +463,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "pray",  # 2
             "set-up",  # 3
             "code",  # 23
-            f"prepare {even_day_label} and nets",
+            f"prepare {even_day_label}",
             f"{even_day_label}",  # 18
             f"prepare {odd_day_label}",
             f"{odd_day_label}",  # 5
@@ -427,11 +491,39 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],
         },
     ),
-    "morning": StartupPreset(
+    "morning_wake_up": StartupPreset(
         schedule=[
-            [2, 3],  # 3
+            [4, 3],  # 7
+            [21, 5],  # 27
+            [21, 5],  # 26
+        ],
+        labels=[
+            "pray",  # 4
+            "prepare myself for the day",  # 3
+            "polymath first session",  # 22
+            "polymath first break",  # 5
+            "polymath second session",  # 21
+            "nets",  # 4
+        ],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="morning winter ritual",
+        notify_color="yellow",
+        commands={
+            "session_start": [
+                open_zk
+            ],  # only once, at the very beginning (plain string)
+            "pomodoro_done": [
+                [nets, 2],  # after 3rd pomodoro
+            ],
+        },
+    ),
+    "morning_old": StartupPreset(
+        schedule=[
+            [5, 3],  # 8
             [22, 1],  # 25
-            [15, 5],  # 20
+            [10, 5],  # 15
             [10, 2],  # 12
         ],
         labels=[
