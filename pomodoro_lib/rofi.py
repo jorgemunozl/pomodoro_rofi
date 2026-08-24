@@ -3,7 +3,7 @@
 import subprocess
 from pathlib import Path
 
-from pomodoro_lib.config import (
+from pomodoro_lib.constants import (
     BACK_LABEL,
     COUNT_OPTIONS,
     CUSTOM_LABEL,

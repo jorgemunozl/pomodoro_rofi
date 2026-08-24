@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from pomodoro_lib.commands import CommandRunner
-from pomodoro_lib.config import (
+from pomodoro_lib.constants import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
     BELL_30_FILE,

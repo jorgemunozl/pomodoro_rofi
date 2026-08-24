@@ -23,7 +23,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from pomodoro_lib.config import SOUNDS_DIR  # noqa: E402
+from pomodoro_lib.constants import SOUNDS_DIR  # noqa: E402
 
 PREFIX = "say_time"
 
@@ -58,7 +58,9 @@ def generate_one(hour: int, minute: int, meridiem: str) -> tuple[str, str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pre-generate say_time mp3s")
     parser.add_argument(
-        "--jobs", type=int, default=1,
+        "--jobs",
+        type=int,
+        default=1,
         help="Parallel workers (default 1; be gentle with Google's API)",
     )
     args = parser.parse_args()
@@ -75,12 +77,13 @@ def main() -> None:
 
     # Count how many already exist
     existing = sum(
-        1 for h, m, mer in tasks
-        if (SOUNDS_DIR / minute_filename(h, m, mer)).exists()
+        1 for h, m, mer in tasks if (SOUNDS_DIR / minute_filename(h, m, mer)).exists()
     )
     print(f"📁 {SOUNDS_DIR}")
-    print(f"🎯 {len(tasks)} times total, {existing} already cached, "
-          f"{len(tasks) - existing} to generate")
+    print(
+        f"🎯 {len(tasks)} times total, {existing} already cached, "
+        f"{len(tasks) - existing} to generate"
+    )
 
     start = time.time()
     done = generated = failed = 0
@@ -88,8 +91,7 @@ def main() -> None:
     if args.jobs > 1:
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             futures = {
-                pool.submit(generate_one, h, m, mer): (h, m, mer)
-                for h, m, mer in tasks
+                pool.submit(generate_one, h, m, mer): (h, m, mer) for h, m, mer in tasks
             }
             for fut in as_completed(futures):
                 name, status = fut.result()
@@ -114,8 +116,10 @@ def main() -> None:
                 _progress(done, len(tasks), start)
 
     elapsed = time.time() - start
-    print(f"\n✅ Done in {elapsed:.0f}s: {generated} generated, "
-          f"{failed} failed, {len(tasks) - generated - failed} cached")
+    print(
+        f"\n✅ Done in {elapsed:.0f}s: {generated} generated, "
+        f"{failed} failed, {len(tasks) - generated - failed} cached"
+    )
 
 
 def _progress(done: int, total: int, start: float) -> None:
@@ -124,7 +128,8 @@ def _progress(done: int, total: int, start: float) -> None:
     remaining = (total - done) / rate if rate > 0 else 0
     print(
         f"\r  {done}/{total}  ({rate:.1f}/s, ~{remaining:.0f}s left)   ",
-        end="", flush=True,
+        end="",
+        flush=True,
     )
 
 

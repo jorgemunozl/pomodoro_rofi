@@ -18,7 +18,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Label, Static
 
-from pomodoro_lib.config import HISTORY_FILE
+from pomodoro_lib.constants import HISTORY_FILE
 from pomodoro_lib.heatmap import generate_heatmap_data, parse_history
 
 # ── Constants ─────────────────────────────────────────────────────────────────

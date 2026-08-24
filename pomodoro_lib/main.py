@@ -11,7 +11,8 @@ from pomodoro_lib.commands import (
     EVENT_BELL_END,
     CommandRunner,
 )
-from pomodoro_lib.config import (
+from pomodoro_lib.config import CHAINS, EVENT_COMMANDS, STARTUP_PRESETS
+from pomodoro_lib.constants import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
     BACK_LABEL,
@@ -20,13 +21,11 @@ from pomodoro_lib.config import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
-    CHAINS,
     CMD_LOG_FILE,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
     DURATION_PRESETS,
-    EVENT_COMMANDS,
     EXTRA_WORK_SECS,
     HISTORY_FILE,
     INCLUDE_DURATION_FILES,
@@ -37,7 +36,6 @@ from pomodoro_lib.config import (
     POMO_DIR,
     POMODORO_DEFAULTS,
     SKIP_RANDOM_FILE,
-    STARTUP_PRESETS,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,

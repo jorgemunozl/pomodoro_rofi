@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pomodoro_lib.config import ROFI_THEME
+from pomodoro_lib.constants import ROFI_THEME
 
 
 def parse_history(history_path: Path) -> list[dict[str, Any]]:

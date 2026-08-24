@@ -28,7 +28,7 @@ class PomodoroState:
     arc_switches: list = field(
         default_factory=list
     )  # [[at_pomodoro, dir_path], ...] — sequential ARC audio switches
-    notify_color: str = "default"  # see NOTIFY_COLORS in config.py
+    notify_color: str = "default"  # see NOTIFY_COLORS in constants.py
     notify_title: str = ""  # template: "{summary}" substituted, empty = no change
     notify_desc: str = ""  # template: "{body}" substituted, empty = no change
     notify_timeout: int = 0  # milliseconds (0 = dunst default)
