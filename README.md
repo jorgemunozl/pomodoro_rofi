@@ -136,7 +136,8 @@ pomodoro_rofi/
 ├── pomodoro              # CLI entry point (executable)
 ├── pomodoro_lib/
 │   ├── __init__.py       # Package marker
-│   ├── config.py         # Paths, presets, and defaults
+│   ├── constants.py     # Static constants: paths, commands, defaults
+│   ├── config.py         # Session configuration: presets, chains, event commands
 │   ├── state.py          # PomodoroState dataclass + JSON persistence
 │   ├── timer.py          # TimerController — background thread, mpv, notifications
 │   ├── rofi.py           # Rofi menu helpers (dmenu wrappers)
@@ -153,7 +154,7 @@ pomodoro_rofi/
 
 ### Paths
 
-All paths are defined in [`pomodoro_lib/config.py`](pomodoro_lib/config.py) and can be
+All paths are defined in [`pomodoro_lib/constants.py`](pomodoro_lib/constants.py) and can be
 overridden by setting the `XDG_CONFIG_HOME` environment variable.
 
 | Path | Default | Purpose |
@@ -167,7 +168,7 @@ overridden by setting the `XDG_CONFIG_HOME` environment variable.
 
 ### Video presets
 
-In `config.py`, the `POMODORO_DEFAULTS` list lets you define default rhythms per video:
+In `constants.py`, the `POMODORO_DEFAULTS` list lets you define default rhythms per video:
 
 ```python
 POMODORO_DEFAULTS = [

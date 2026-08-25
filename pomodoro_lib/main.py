@@ -3,6 +3,7 @@
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from pomodoro_lib.commands import (
@@ -1778,6 +1779,38 @@ def _start_video_session(
     return ctrl
 
 
+def _resolve_chain_step(step) -> tuple[str | None, str, str | None]:
+    """Resolve one Chain step into (task, item) plus a day-cycle note.
+
+    A step may be a string (video/preset name), a ``(task, item)`` tuple, or
+    a list of steps whose element is chosen by day of month: ``day % n`` picks
+    the index (a day that is a multiple of ``n`` → first element, +1 → second,
+    …). Lists may appear inside tuples too, e.g. ``("deep work", [a, b])``.
+    """
+    day = datetime.now().day
+
+    if isinstance(step, list):
+        n = len(step)
+        if n == 0:
+            raise ValueError(f"empty day-cycle list: {step!r}")
+        picked = step[day % n]
+        task, item, _ = _resolve_chain_step(picked)
+        return task, item, f"day {day} % {n} = {day % n} → {item}"
+
+    if isinstance(step, tuple):
+        task, item = step
+        if isinstance(item, list):
+            n = len(item)
+            if n == 0:
+                raise ValueError(f"empty day-cycle list: {step!r}")
+            picked = item[day % n]
+            inner_task, inner_item, note = _resolve_chain_step(picked)
+            return inner_task or task, inner_item, note
+        return task, item, None
+
+    return None, step, None
+
+
 def _handle_chain(name: str) -> None:
     """Run a Chain: each step starts when the previous one completes."""
     chain = CHAINS[name]
@@ -1799,11 +1832,12 @@ def _handle_chain(name: str) -> None:
         print(f"   {chain.description}")
 
     for i, step in enumerate(chain.steps, 1):
-        # Optional (task, item) tuple, otherwise plain video/preset name
-        if isinstance(step, tuple):
-            task, item = step
-        else:
-            task, item = None, step
+        try:
+            task, item, day_note = _resolve_chain_step(step)
+        except ValueError as exc:
+            raise ValueError(f"Chain '{name}' step {i}: {exc}") from exc
+        if day_note:
+            print(f"\n⛓  [{i}/{len(chain.steps)}] {day_note}")
 
         if item in STARTUP_PRESETS:
             print(f"\n⛓  [{i}/{len(chain.steps)}] Preset: {item}")
@@ -1981,6 +2015,57 @@ def _handle_log() -> None:
         print("No history yet.")
 
 
+def _handle_list() -> None:
+    """Print the video presets, arc sources, startup presets, and chains."""
+    # ── Video presets ──────────────────────────────────────────────────────
+    print("🎬 Video presets (POMODORO_DEFAULTS)")
+    print(f"  {'video':<28} {'rhythm':<34} {'warmup':>8}  file")
+    print("-" * 72)
+    for entry in POMODORO_DEFAULTS:
+        video = entry[0]
+        if isinstance(entry[1], list):
+            # rhythm-list style: [(work, break[, reps]), ..., warm_up]
+            warm_up = entry[1][-1]
+            parts = []
+            for tup in entry[1][:-1]:
+                work, break_ = tup[0], tup[1]
+                reps = tup[2] if len(tup) >= 3 else 1
+                seg = f"{work}/{break_}"
+                if reps > 1:
+                    seg += f" ×{reps}"
+                parts.append(seg)
+            rhythm = " → ".join(parts)
+        else:
+            work, break_, reps = entry[1], entry[2], entry[3]
+            warm_up = entry[4] if len(entry) >= 5 else 0
+            rhythm = f"{work}/{break_} ×{reps}"
+        status = "✓" if (POMO_DIR / video).exists() else "✗ missing"
+        print(f"  {video:<28} {rhythm:<34} {f'{warm_up:g}s':>8}  {status}")
+
+    # ── Special video sources ──────────────────────────────────────────────
+    print()
+    print("📀 Special video sources (--video <value>)")
+    arc_status = "✓" if ARC_SOUNDTRACK.exists() else "✗ missing"
+    print(f"  {'arc / CURRENT_ARC':<20} ARC soundtrack  {ARC_SOUNDTRACK}  {arc_status}")
+    past_status = "✓" if PAST_ARC_FILE.exists() else "✗ missing"
+    print(
+        f"  {'past_arc / PAST_ARC':<20} music folder    {PAST_ARC_FILE}  {past_status}"
+    )
+    print(f"  {'random':<20} random video from {POMO_DIR}")
+
+    # ── Startup presets ────────────────────────────────────────────────────
+    print()
+    print("🚀 Startup presets (pomodoro <preset>)")
+    for name, preset in STARTUP_PRESETS.items():
+        print(f"  {name:<20} {preset.description}")
+
+    # ── Chains ─────────────────────────────────────────────────────────────
+    print()
+    print("⛓  Chains (pomodoro <chain>)")
+    for name, chain in CHAINS.items():
+        print(f"  {name:<20} {chain.description or '—'}")
+
+
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
@@ -2077,6 +2162,9 @@ def main() -> None:
         # -log / --log  →  show session history
         if args[0] in ("-log", "--log"):
             _handle_log()
+        # -list / --list  →  show video presets
+        elif args[0] in ("-list", "--list"):
+            _handle_list()
         elif args[0].startswith("-"):
             _handle_start(args)
         else:

@@ -70,12 +70,19 @@ class Chain:
       with its own schedule, labels, and commands.
     * A **``(task, item)`` tuple** — same as the two above, but with a custom
       task name, e.g. ``("deep work", "brain_fm.mp4")``.
+    * A **list of steps** — e.g. ``["dawn_2025_II.mp4", "brain_fm.mp4"]``.
+      The element is chosen by day of month: ``day % len(list)`` selects the
+      index (a day that is a multiple of the length → first element, +1 →
+      second, …). Each element may itself be a video/preset name or a
+      ``(task, item)`` tuple. The tuple form also accepts a list as *item*,
+      e.g. ``("deep work", ["a.mp4", "b.mp4"])``, to cycle a fixed task
+      between videos by day.
 
     Example::
 
         Chain(
-            steps=["dawn_2025_II.mp4", "study.mp4", "morning"],
-            description="dawn → study → morning preset",
+            steps=["dawn_2025_II.mp4", ["a.mp4", "b.mp4"], "morning"],
+            description="dawn → day-cycled study → morning preset",
         )
     """
 
@@ -88,12 +95,19 @@ class Chain:
 
 CHAINS: dict[str, Chain] = {
     "morning": Chain(
-        steps=["morning_wake_up", "dawn_2025_II.mp4", "brain_fm.mp4"],
-        description="dawn → study → brain_fm → morning preset",
+        steps=[
+            "morning_wake_up",
+            ["dawn_2025_II.mp4", "golden_morning.webm", "past_arc"],
+        ],
+        description="morning default",
     ),
     "cleaning_full": Chain(
         steps=["cleaning", "mine_2025_II.webm"],
         description="if you make this chain the house cleaning by itself",
+    ),
+    "noon": Chain(
+        steps=["noon_after_eat", ["shinjuku2.mp4", "study.mp4", "mine_2025_II.webm"]],
+        description="covering the second peak of work",
     ),
 }
 
@@ -198,6 +212,28 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         },
         notify_color="blue",
     ),
+    "night_last": StartupPreset(
+        schedule=[[15, 1], [30, 1], [12, 2], [5, 5]],
+        labels=[
+            "journal and reflect",  # 15 min
+            "prepare task",  # 1 min
+            "personal tasks/applications/budget",  # 30 min
+            "prepare chess",  # 1 min
+            "chess",  # 12 min
+            "go bed",  # 2 min, auto turn off in 10 min
+            "pray at bed",  # 5 min
+            "plan thinking tomorrow",  # 5 min
+        ],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="night when at home, begin programatically at 7:00 pm finish at 9:30, thus wake up at 5:00",
+        commands={
+            "session_complete": [f"sleep 80; {shutdown_command}"],
+            "session_start": [f"{even_day_social}"],  # Tanjiro Sound before begin!
+        },
+        notify_color="blue",
+    ),
     "night_hardcore": StartupPreset(
         schedule=[[25, 5], [25, 5], [25, 5], [25, 5], [25, 5]],  # 2:30 min
         labels=[
@@ -252,7 +288,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],
         },
     ),
-    "noon": StartupPreset(
+    "noon_after_eat": StartupPreset(
         schedule=[
             [5, 3],  # 8
             [16, 4],  # 20
@@ -334,11 +370,11 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         ],
         labels=[
             "pray",  # 4
-            "prepare myself for the day",  # 3
+            "prepare myself for the morning",  # 3
             "polymath first session",  # 22
-            "polymath first break",  # 5
-            "polymath second session",  # 21
-            "nets",  # 4
+            "nets break",  # 5
+            "polymath second session, morning warm up",  # 21
+            "schedule the morning",  # 4
         ],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),

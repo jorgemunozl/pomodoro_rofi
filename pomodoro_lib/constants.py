@@ -64,7 +64,6 @@ open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
 open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2.mp4'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
-i3_tab = "i3-msg  "
 shutdown_command = "python3 /home/jorge/dotfiles/alarm/alarm.py"
 
 calendly = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=canvas%2Fdays-of-the-week-researchy"'
@@ -73,7 +72,7 @@ open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox
 open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
 slack = "slack"
 nchat = "alacritty -e nchat"
-nets = f"{open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced} & {tabbed}"
+nets = f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}"
 
 # ── Day-derived values ────────────────────────────────────────────────────────
 current_day = datetime.now().day
