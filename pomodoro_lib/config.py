@@ -22,6 +22,7 @@ from pomodoro_lib.constants import (
     even_day_social,
     even_day_social_label,
     even_day_zk,
+    journal,
     nets,
     odd_day_label,
     odd_day_zk,
@@ -179,114 +180,47 @@ EVENT_COMMANDS = cmds.build()
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
-    "night_light": StartupPreset(
+    "night": StartupPreset(
         schedule=[
-            [25, 10],
-        ],  # TODO: Warm up time lacking
-        labels=[f"{even_day_social_label}", "prepare to sleep"],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_STARTUP,
-        # commands={ turn } turn off
-        notify_color="blue",
-        description="night light when arrive tired",
-    ),
-    "night_blue": StartupPreset(
-        schedule=[[25, 5], [25, 5], [25, 5], [25, 5]],  # 2:30 min
+            [13, 6],  # 18
+            [40, 1],  # 41
+            [10, 1],  # 11
+            [5, 1],  # 6
+            [12, 6],  # 18 chess and metrics
+            [10, 5],  # 11
+            [2, 5],  # 7
+            [5, 0],  # 5
+        ],  # 100
         labels=[
-            "pray, journal 1/4",
-            "prepare for tomorrow break 1/4",
-            "blue pomodoro, personal vault 2/4",
-            "log metrics 2/4",
-            "blue pomodoro 3/4",
-            "chess pomodoro break 3/4",
-            "practicing next arc night 4/4",
-        ],
-        switches=[],
-        start_dir=str(POMO_DIR / "christmas_2025-I.webm"),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="night when at home, begin programatically at 7:00 pm finish at 9:30, thus wake up at 5:00",
-        commands={
-            "session_complete": [f"sleep 80; {shutdown_command}"],
-            "session_start": [f"{even_day_social}"],  # Tanjiro Sound before begin!
-        },
-        notify_color="blue",
-    ),
-    "night_last": StartupPreset(
-        schedule=[[15, 1], [30, 1], [12, 2], [5, 5]],
-        labels=[
-            "journal and reflect",  # 15 min
-            "prepare task",  # 1 min
-            "personal tasks/applications/budget",  # 30 min
+            "journal",  # 13 min
+            "reflect",  # 6 min
+            "personal tasks",  # 40 min
+            "prepare applications",  # 1
+            "applications",  # 10 min
+            "prepare budget",  # 1 min
+            "budget",  # 5 min
             "prepare chess",  # 1 min
             "chess",  # 12 min
+            "log metrics/write night task for tomorrow and save them",  # 6 min
+            "write core task for tomorrow",  # 10 min
+            "prepare room to go to bed/tidy around/prepare wake up",  # 5 min
             "go bed",  # 2 min, auto turn off in 10 min
             "pray at bed",  # 5 min
             "plan thinking tomorrow",  # 5 min
+            "",
         ],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
-        description="night when at home, begin programatically at 7:00 pm finish at 9:30, thus wake up at 5:00",
+        description="night when at home, begin programatically at 7:30 pm finish at 9:30, thus wake up at 5:00",
         commands={
-            "session_complete": [f"sleep 80; {shutdown_command}"],
-            "session_start": [f"{even_day_social}"],  # Tanjiro Sound before begin!
-        },
-        notify_color="blue",
-    ),
-    "night_hardcore": StartupPreset(
-        schedule=[[25, 5], [25, 5], [25, 5], [25, 5], [25, 5]],  # 2:30 min
-        labels=[
-            f"{even_day_social_label} nigth review",
-            "wash teeth 0/4",
-            "blue pomodoro 1/5",
-            "prepare for tomorrow 1/5",
-            "blue pomodoro 2/4",
-            "log metrics 2/4",
-            "blue pomodoro 3/4",
-            "last chess of the day and grab a book to read 4/4",
-            "practicing next arc night 4/4",
-        ],
-        switches=[[2, str(POMO_DIR / "christmas_2025-I.webm")]],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="night when at home, begin programatically at 7:00 pm finish at 9:30, thus wake up at 5:00",
-        commands={
-            "session_complete": [f"sleep 80; {shutdown_command}"],
-            "session_start": [f"{even_day_social}"],  # Tanjiro Sound before begin!
-        },
-        notify_color="blue",
-    ),
-    "noon_code_false": StartupPreset(
-        schedule=[[15, 3], [15, 1], [17, 1], [6, 2]],
-        labels=[
-            "polymath",
-            "set-up",
-            "applications",
-            "prepare code",
-            "coding",
-            "prepare chess",
-            "six min chess",
-            "plan plan",
-        ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="noon after eat around preparing ourselves for the nap",
-        notify_color="blue",
-        commands={
-            "session_start": [
-                even_day_zk
-            ],  # only once, at the very beginning (plain string)
+            "session_complete": [f"sleep 60; {shutdown_command}"],
+            "session_start": [journal],
             "pomodoro_done": [
-                [odd_day_zk, 1],  # after 1st pomodoro
-                [open_zed, 2],  # after 2rd pomodoro
-                [open_chess, 3],  # after 3rd pomodoro
-            ],
-            "session_complete": [
-                f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
+                [open_chess, 4],
             ],
         },
+        notify_color="blue",
     ),
     "noon_after_eat": StartupPreset(
         schedule=[
@@ -322,46 +256,6 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],
         },
     ),
-    "noon_old": StartupPreset(
-        schedule=[
-            [3, 1],  # 4
-            [20, 4],  # 24
-            [18, 1],  # 19
-            [5, 1],  # 11
-            [6, 1],  # 7 total 65
-        ],
-        labels=[
-            "pray",  # 2
-            "set-up",  # 3
-            "code",  # 23
-            f"prepare {even_day_label}",
-            f"{even_day_label}",  # 18
-            f"prepare {odd_day_label}",
-            f"{odd_day_label}",  # 5
-            "prepare chess",  # 1
-            "blitz chess",  # 6
-            "prepare for the afternoon",
-        ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
-        notify_color="blue",
-        commands={
-            "session_start": [
-                open_zed
-            ],  # only once, at the very beginning (plain string)
-            "pomodoro_done": [
-                [nets, 2],  # after 2nd pomodoro
-                [odd_day_zk, 3],  # after 3rd pomodoro
-                [open_chess, 4],  # after 4rd pomodoro
-            ],
-            "pomodoro_begin": [[even_day_zk, 2]],
-            "session_complete": [
-                f"sleep 60 ;{open_tired}; {open_shinjuku_2}",
-            ],
-        },
-    ),
     "morning_wake_up": StartupPreset(
         schedule=[
             [4, 3],  # 7
@@ -387,44 +281,6 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],  # only once, at the very beginning (plain string)
             "pomodoro_done": [
                 [nets, 2],  # after 3rd pomodoro
-            ],
-        },
-    ),
-    "morning_old": StartupPreset(
-        schedule=[
-            [5, 3],  # 8
-            [22, 1],  # 25
-            [10, 5],  # 15
-            [10, 2],  # 12
-        ],
-        labels=[
-            "pray",
-            "prepare myself for the day",
-            even_day_label,
-            "application prepare",
-            odd_day_label,
-            "net",
-            "chess",
-            "study my chess",
-        ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="morning winter ritual",
-        notify_color="yellow",
-        commands={
-            "session_start": [
-                even_day_zk
-            ],  # only once, at the very beginning (plain string)
-            "pomodoro_done": [
-                [odd_day_zk, 2],  # after 1st pomodoro
-                [nets, 3],  # after 3rd pomodoro
-            ],
-            "pomodoro_begin": [
-                [open_chess, 3],  # before 1st pomodoro
-            ],
-            "session_complete": [
-                f"sleep 60 ;{open_dawn}",
             ],
         },
     ),

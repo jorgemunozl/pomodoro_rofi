@@ -44,6 +44,8 @@ PAST_ARC_FILE = Path.home() / "Videos" / "music"
 # ── Commands ──────────────────────────────────────────────────────────────────
 tabbed = 'alacritty -e "i3-msg layout tabbed"'
 
+journal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fdays-of-the-week"'
+
 open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
 open_social = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=social"'
