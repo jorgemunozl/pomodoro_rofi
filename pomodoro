@@ -5,6 +5,7 @@ Usage:
     pomodoro                            Launch the rofi UI
     pomodoro status                     Print polybar status line
     pomodoro --list                     List video presets, arc sources, presets, chains
+    pomodoro --command <name>            Run a named command (see --list)
     pomodoro toggle                     Pause/resume current session
     pomodoro stop                       Stop current session
     pomodoro next                       Skip to the next phase

@@ -1,6 +1,7 @@
 """CLI entry point — main menu loop, subcommands, and UI flow."""
 
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -23,6 +24,7 @@ from pomodoro_lib.constants import (
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
     CMD_LOG_FILE,
+    COMMANDS,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DEFAULT_TASKS,
@@ -2065,6 +2067,30 @@ def _handle_list() -> None:
     for name, chain in CHAINS.items():
         print(f"  {name:<20} {chain.description or '—'}")
 
+    # ── Commands ─────────────────────────────────────────────────────────────
+    print()
+    print("🖥  Commands (pomodoro --command <name>)")
+    for name, cmd in COMMANDS.items():
+        print(f"  {name:<20} {cmd}")
+
+
+def _handle_command(name: str) -> None:
+    """Run a named command from the COMMANDS registry (fire and forget)."""
+    cmd = COMMANDS.get(name)
+    if cmd is None:
+        print(
+            f"Unknown command: {name!r}. Available: {', '.join(COMMANDS)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"▶ Running '{name}'...")
+    subprocess.Popen(
+        cmd,
+        shell=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
 
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
@@ -2165,6 +2191,12 @@ def main() -> None:
         # -list / --list  →  show video presets
         elif args[0] in ("-list", "--list"):
             _handle_list()
+        # --command <name>  →  run a named command
+        elif args[0] in ("--command", "-command"):
+            if len(args) < 2:
+                print("usage: pomodoro --command <name>", file=sys.stderr)
+                sys.exit(1)
+            _handle_command(args[1])
         elif args[0].startswith("-"):
             _handle_start(args)
         else:

@@ -102,6 +102,45 @@ odd_day_label = (not even_day) * "polymath" + even_day * "applications"
 even_day_social_label = even_day * "social" + (not even_day) * "networking"
 
 
+# ── Command registry (for `pomodoro --command <name>`) ────────────────────────
+# Every shell command defined above, plus the day-derived shortcuts. Kept after
+# the definitions so all names exist when this dict is built.
+COMMANDS: dict[str, str] = {
+    name: globals()[name]
+    for name in (
+        "tabbed",
+        "journal",
+        "open_zk",
+        "open_personal",
+        "open_social",
+        "open_network",
+        "open_chess",
+        "open_git",
+        "open_zed",
+        "open_uta",
+        "open_terminal_riced",
+        "cleaning",
+        "open_dawn",
+        "open_mine",
+        "open_shinjuku_2",
+        "open_tired",
+        "shutdown_command",
+        "calendly",
+        "open_gmail",
+        "open_gmail_uni",
+        "open_huggingface",
+        "slack",
+        "nchat",
+        "nets",
+        # Day-derived shortcuts (resolve to a concrete command at import time)
+        "even_day_zk",
+        "even_day_social",
+        "odd_day_zk",
+        "odd_day_social",
+    )
+}
+
+
 # ── Runtime state files ────────────────────────────────────────────────────
 # Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
 # and /tmp on regular Linux desktops.
