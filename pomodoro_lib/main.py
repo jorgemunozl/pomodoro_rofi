@@ -23,10 +23,12 @@ from pomodoro_lib.constants import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
+    CLIAMP_LOFI_URL,
     CMD_LOG_FILE,
     COMMANDS,
     COUNT_OPTIONS,
     CUSTOM_LABEL,
+    DATA_DIR,
     DEFAULT_TASKS,
     DURATION_PRESETS,
     EXTRA_WORK_SECS,
@@ -373,6 +375,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
     warm_up_secs = 0
     audio_only = False
     arc_mode = False
+    cliamp_mode = False
 
     while True:
         if step == 1:
@@ -387,8 +390,12 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
         elif step == 2:
             arc_thumb = _ensure_arc_thumb()
             past_arc_thumb = _ensure_past_arc_thumb()
+            cliamp_thumb = _ensure_cliamp_thumb()
             choice = pick_video(
-                POMO_DIR, arc_thumb=arc_thumb, past_arc_thumb=past_arc_thumb
+                POMO_DIR,
+                arc_thumb=arc_thumb,
+                past_arc_thumb=past_arc_thumb,
+                cliamp_thumb=cliamp_thumb,
             )
             if choice is None:
                 return False  # ESC → exit
@@ -409,6 +416,14 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 arc_mode = True
                 video = str(PAST_ARC_FILE)
                 video_name = "PAST_ARC"
+                step = 4  # skip mode selection, go straight to duration
+                continue
+
+            if choice == "CLIAMP":
+                # CLIAMP lofi radio — audio from the cliamp daemon, no mpv
+                cliamp_mode = True
+                video = "CLIAMP"
+                video_name = "CLIAMP"
                 step = 4  # skip mode selection, go straight to duration
                 continue
 
@@ -457,6 +472,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         schedule=schedule or None,
                         audio_only=audio_only,
                         arc_mode=arc_mode,
+                        cliamp_mode=cliamp_mode,
                     )
                     return True
                 # Personalized → fall through to step 4, keep warm_up_secs
@@ -536,6 +552,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         warm_up_secs,
                         audio_only=audio_only,
                         arc_mode=arc_mode,
+                        cliamp_mode=cliamp_mode,
                     )
                     return True
 
@@ -657,8 +674,15 @@ def _resolve_video(name: str) -> Path | None:
     If `name` already has an extension (.mp4, .webm), use it directly.
     Otherwise try .mp4 then .webm.
     """
-    if name.lower() in ("arc", "current_arc", "past_arc"):
-        return None  # sentinel: caller should use arc mode
+    if name.lower() in (
+        "arc",
+        "current_arc",
+        "past_arc",
+        "cliamp",
+        "lofi",
+        "cliamp_lofi",
+    ):
+        return None  # sentinel: caller should use arc/cliamp mode
     p = Path(name)
     if p.suffix in (".mp4", ".webm"):
         full = POMO_DIR / p
@@ -736,6 +760,96 @@ def _ensure_mp3(video_path: Path) -> Path:
         sys.exit(1)
 
     return mp3_path
+
+
+def _ensure_cliamp_thumb() -> str:
+    """Return a cached square lofi-girl thumbnail for the CLIAMP picker entry.
+
+    Downloads the Lofi Girl stream art and crops it to a 250x250 square,
+    cached at data/cliamp_lofi.jpg. Falls back to a generated placeholder
+    if the download fails.
+    """
+    thumb = DATA_DIR / "cliamp_lofi.jpg"
+    if thumb.exists():
+        return str(thumb)
+
+    try:
+        import urllib.request
+
+        tmp = DATA_DIR / "cliamp_lofi_raw.jpg"
+        with (
+            urllib.request.urlopen(
+                "https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg", timeout=15
+            ) as resp,
+            open(tmp, "wb") as fh,
+        ):
+            fh.write(resp.read())
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-i",
+                str(tmp),
+                "-vf",
+                "crop=360:360,scale=250:250",
+                "-frames:v",
+                "1",
+                str(thumb),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        tmp.unlink(missing_ok=True)
+        if result.returncode == 0 and thumb.exists():
+            return str(thumb)
+    except Exception:
+        pass
+
+    # Fallback: dark 250x250 tile with "LOFI" text
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=0x1e1e2e:s=250x250",
+                "-vf",
+                (
+                    "drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    ":text='LOFI':fontcolor=0xf9e2af:fontsize=48"
+                    ":x=(w-text_w)/2:y=(h-text_h)/2"
+                ),
+                "-frames:v",
+                "1",
+                str(thumb),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and thumb.exists():
+            return str(thumb)
+    except Exception:
+        pass
+
+    # Last resort: 1x1 dark pixel
+    try:
+        from PIL import Image
+
+        img = Image.new("RGB", (1, 1), color=(30, 30, 46))
+        img.save(thumb, "JPEG")
+        return str(thumb)
+    except ImportError:
+        pass
+
+    return ""
 
 
 def _ensure_arc_thumb() -> str:
@@ -1509,14 +1623,20 @@ def _handle_start(args: list[str]) -> None:
     task = parsed.task
     arc_mode = parsed.video.lower() in ("arc", "current_arc")
     past_arc_mode = parsed.video.lower() == "past_arc"
+    cliamp_mode = parsed.video.lower() in ("cliamp", "lofi", "cliamp_lofi")
     random_picked = parsed.video.lower() == "random"
 
-    # ── Resolve video path (or pick random / arc) ──────────────────────────
+    # ── Resolve video path (or pick random / arc / cliamp) ────────────────
     if past_arc_mode:
         video_name = "PAST_ARC"
         video_path = PAST_ARC_FILE
         parsed.audio = True
         arc_mode = True
+    elif cliamp_mode:
+        # CLIAMP lofi radio — audio comes from the cliamp daemon, not mpv
+        video_name = "CLIAMP"
+        video_path = Path("CLIAMP")  # used as identifier in state
+        parsed.audio = True
     elif arc_mode:
         # Current arc soundtrack — no video file needed
         video_name = "CURRENT_ARC"
@@ -1542,7 +1662,7 @@ def _handle_start(args: list[str]) -> None:
     video_name = video_path.name
 
     # ---- Generate mp3 for audio-only mode ----
-    if parsed.audio and not arc_mode:
+    if parsed.audio and not arc_mode and not cliamp_mode:
         _ensure_mp3(video_path)
 
     # ── Determine work/break/count/warmup ─────────────────────────────────
@@ -1577,8 +1697,9 @@ def _handle_start(args: list[str]) -> None:
         if rhythm_data is not None:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
         else:
-            # No preset found — fallback to 25-5 × 4 for random/arc, 25-5 × 1 for explicit
-            if random_picked or arc_mode:
+            # No preset found — fallback to 25-5 × 4 for random/arc/cliamp,
+            # 25-5 × 1 for explicit
+            if random_picked or arc_mode or cliamp_mode:
                 work_min, break_min, total, warm_up_secs = 25, 5, 4, 0
         if parsed.count is not None:
             total = parsed.count
@@ -1613,6 +1734,7 @@ def _handle_start(args: list[str]) -> None:
         schedule=schedule or None,
         audio_only=parsed.audio,
         arc_mode=arc_mode,
+        cliamp_mode=cliamp_mode,
     )
 
     rhythm_label = f"{work_min}/{break_min}"
@@ -1623,6 +1745,7 @@ def _handle_start(args: list[str]) -> None:
         + (" \U0001f3b2" if random_picked else "")
         + (" \U0001f3b5" if parsed.audio else "")
         + (" \U0001f3b6 ARC" if arc_mode else "")
+        + (" \U0001f3a7 CLIAMP lofi" if cliamp_mode else "")
     )
 
     # ── Stay alive to handle transitions ──────────────────────────────────
@@ -2053,6 +2176,7 @@ def _handle_list() -> None:
     print(
         f"  {'past_arc / PAST_ARC':<20} music folder    {PAST_ARC_FILE}  {past_status}"
     )
+    print(f"  {'cliamp / lofi':<20} CLIAMP lofi radio ({CLIAMP_LOFI_URL})")
     print(f"  {'random':<20} random video from {POMO_DIR}")
 
     # ── Startup presets ────────────────────────────────────────────────────

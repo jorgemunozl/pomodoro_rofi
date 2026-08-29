@@ -119,16 +119,19 @@ def pick_video(
     *,
     arc_thumb: str | None = None,
     past_arc_thumb: str | None = None,
+    cliamp_thumb: str | None = None,
 ) -> str | None:
     """Show video grid with thumbnail icons.
 
     If *arc_thumb* is provided, prepends a "CURRENT_ARC" entry.
     If *past_arc_thumb* is provided, prepends a "PAST_ARC" entry.
+    If *cliamp_thumb* is provided, prepends a "CLIAMP" entry.
 
-    Returns the selected filename, "CURRENT_ARC", "PAST_ARC", or None.
+    Returns the selected filename, "CURRENT_ARC", "PAST_ARC", "CLIAMP",
+    or None.
     """
     videos = sorted(f for f in videos_dir.iterdir() if f.suffix in (".mp4", ".webm"))
-    if not videos and not arc_thumb and not past_arc_thumb:
+    if not videos and not arc_thumb and not past_arc_thumb and not cliamp_thumb:
         return None
 
     # Build raw input with \0icon\x1f for thumbnails
@@ -141,6 +144,10 @@ def pick_video(
     # PAST_ARC entry second, if provided
     if past_arc_thumb:
         parts.append(f"PAST_ARC\0icon\x1f{past_arc_thumb}")
+
+    # CLIAMP (lofi radio) entry third, if provided
+    if cliamp_thumb:
+        parts.append(f"CLIAMP\0icon\x1f{cliamp_thumb}")
 
     for v in videos:
         thumb = videos_dir / f"{v.stem}.jpg"

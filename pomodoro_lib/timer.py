@@ -12,9 +12,7 @@ from pomodoro_lib.commands import CommandRunner
 from pomodoro_lib.constants import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
-    BELL_30_FILE,
     BELL_30_PLAYED,
-    BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     EXTRA_WORK_SECS,
     FINISH_FILE,
@@ -31,6 +29,10 @@ from pomodoro_lib.constants import (
     TMP_DIR,
     TRANSITION_LOCK,
     WORK_BELL_PLAYED,
+    cliamp_pause,
+    cliamp_play,
+    cliamp_start,
+    cliamp_stop,
 )
 from pomodoro_lib.state import PomodoroState
 
@@ -210,6 +212,36 @@ def mpv_cmd(json_cmd: str) -> bool:
         MPV_SOCKET.unlink(missing_ok=True)
         return False
     return True
+
+
+def run_cliamp(cmd: str) -> None:
+    """Fire a CLIAMP control command (fire and forget)."""
+    subprocess.Popen(
+        cmd,
+        shell=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def start_cliamp() -> None:
+    """Start the CLIAMP daemon headless (resumes the lofi radio stream)."""
+    run_cliamp(cliamp_start)
+
+
+def pause_cliamp() -> None:
+    """Pause CLIAMP playback."""
+    run_cliamp(cliamp_pause)
+
+
+def resume_cliamp() -> None:
+    """Resume CLIAMP playback."""
+    run_cliamp(cliamp_play)
+
+
+def stop_cliamp() -> None:
+    """Stop CLIAMP playback."""
+    run_cliamp(cliamp_stop)
 
 
 def fade_arc_volume(remaining_secs: int, fade_window: int = 15) -> None:
@@ -421,6 +453,9 @@ class TimerController:
             self._thread.join(timeout=0.5)
         self._stop_event.clear()
         self._thread = None
+        # CLIAMP sessions stop the daemon; mpv sessions kill the player
+        if STATE_FILE.exists() and PomodoroState.load(STATE_FILE).cliamp_mode:
+            stop_cliamp()
         kill_mpv()
         STATE_FILE.unlink(missing_ok=True)
         PAUSE_FILE.unlink(missing_ok=True)
@@ -444,6 +479,7 @@ class TimerController:
         schedule_labels: list | None = None,
         audio_only: bool = False,
         arc_mode: bool = False,
+        cliamp_mode: bool = False,
         silence_secs: int = ARC_SILENCE_SECONDS,
         notify_color: str = "default",
         notify_title: str = "",
@@ -469,6 +505,7 @@ class TimerController:
             schedule_labels=schedule_labels or [],
             audio_only=audio_only,
             arc_mode=arc_mode,
+            cliamp_mode=cliamp_mode,
             notify_color=notify_color,
             notify_title=notify_title,
             notify_desc=notify_desc,
@@ -476,7 +513,10 @@ class TimerController:
             notify_phases=notify_phases or {},
         )
         self.save_state()
-        start_mpv(video, audio_only, arc_mode, silence_secs)
+        if cliamp_mode:
+            start_cliamp()
+        else:
+            start_mpv(video, audio_only, arc_mode, silence_secs)
         self._cmd_runner.run(
             "session_start",
             task=task,
@@ -537,8 +577,11 @@ class TimerController:
             self._thread.join(timeout=1.0)
         self._stop_event.clear()
         self._thread = None
-        # Pause mpv (video plays continuously across all phases)
-        mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+        # Pause playback (mpv IPC or CLIAMP)
+        if state.cliamp_mode:
+            pause_cliamp()
+        else:
+            mpv_cmd('{"command": ["set_property", "pause", true]}\n')
         notify(
             "🍅 Pomodoro paused",
             f"{secs_left // 60}m left",
@@ -566,8 +609,10 @@ class TimerController:
         self.state.end_ts = time.time() + secs_left
         self.save_state()
 
-        # Unpause mpv (video was paused, never killed)
-        if MPV_SOCKET.exists():
+        # Unpause playback (mpv was paused, never killed)
+        if self.state.cliamp_mode:
+            resume_cliamp()
+        elif MPV_SOCKET.exists():
             mpv_cmd('{"command": ["set_property", "pause", false]}\n')
 
         self._notify(
@@ -627,7 +672,7 @@ class TimerController:
                 icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
-            icon = "🏹" if state.arc_mode else "☕"
+            icon = "🏹" if state.arc_mode else "🎧" if state.cliamp_mode else "☕"
         elif state.phase == "reflect":
             secs = state.remaining_seconds
             icon = "🤔"
@@ -681,12 +726,27 @@ class TimerController:
     def _pause_on_break(self) -> bool:
         """Whether to pause video/audio during breaks.
 
-        True for ARC mode or videos listed in INCLUDE_DURATION_FILES.
+        True for ARC mode, CLIAMP mode, or videos listed in
+        INCLUDE_DURATION_FILES.
         """
-        if self.state.arc_mode:
+        if self.state.arc_mode or self.state.cliamp_mode:
             return True
         video_name = Path(self.state.video).name
         return video_name in INCLUDE_DURATION_FILES
+
+    def _pause_audio(self) -> None:
+        """Pause playback for a break (mpv IPC or CLIAMP)."""
+        if self.state.cliamp_mode:
+            pause_cliamp()
+        else:
+            mpv_cmd('{"command": ["set_property", "pause", true]}')
+
+    def _resume_audio(self) -> None:
+        """Resume playback for a work phase (mpv IPC or CLIAMP)."""
+        if self.state.cliamp_mode:
+            resume_cliamp()
+        else:
+            mpv_cmd('{"command": ["set_property", "pause", false]}')
 
     def _transition_work_to_break(self) -> None:
         """Work → break: update state, notify. Does NOT start a timer.
@@ -718,7 +778,7 @@ class TimerController:
             self.state.end_ts = time.time() + REFLECTION_SECS
             self.save_state()
             if self._pause_on_break():
-                mpv_cmd('{"command": ["set_property", "pause", true]}\n')
+                self._pause_audio()
             WORK_BELL_PLAYED.unlink(missing_ok=True)
             self._notify(
                 "🍅 All sessions complete!",
@@ -752,9 +812,10 @@ class TimerController:
         self.state.current = next_sess
         self.save_state()
 
-        # Pause video/audio during breaks for ARC mode and INCLUDE_DURATION_FILES
+        # Pause video/audio during breaks for ARC mode, CLIAMP, and
+        # INCLUDE_DURATION_FILES
         if self._pause_on_break():
-            mpv_cmd('{"command": ["set_property", "pause", true]}')
+            self._pause_audio()
         WORK_BELL_PLAYED.unlink(missing_ok=True)
 
         # Fire event AFTER state is saved so commands see the updated phase
@@ -870,15 +931,16 @@ class TimerController:
         if self.state.arc_mode:
             mpv_cmd('{"command": ["set_property", "volume", 100]}')
         if self._pause_on_break():
-            mpv_cmd('{"command": ["set_property", "pause", false]}')
-        # If the socket was stale (mpv died), restart it
+            self._resume_audio()
+        # If the socket was stale (mpv died), restart it (not for CLIAMP mode)
         if not MPV_SOCKET.exists() and STATE_FILE.exists():
             state = PomodoroState.load(STATE_FILE)
-            start_mpv(
-                state.video,
-                audio_only=state.audio_only,
-                arc_mode=state.arc_mode,
-            )
+            if not state.cliamp_mode:
+                start_mpv(
+                    state.video,
+                    audio_only=state.audio_only,
+                    arc_mode=state.arc_mode,
+                )
         # Clean up bell flags from the just-ended break
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)

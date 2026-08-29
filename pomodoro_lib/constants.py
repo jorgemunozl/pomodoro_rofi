@@ -76,6 +76,17 @@ slack = "slack"
 nchat = "alacritty -e nchat"
 nets = f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}"
 
+# ── CLIAMP (lofi radio daemon) ─────────────────────────────────────────────────
+# cliamp is a terminal music player; the pomodoro drives it via its IPC CLI.
+# `cliamp --daemon --auto-play` resumes the last stream (the lofi radio,
+# http://radio.cliamp.stream/lofi/stream) headless.
+CLIAMP_LOFI_URL = "http://radio.cliamp.stream/lofi/stream"
+
+cliamp_start = "cliamp --daemon --auto-play"
+cliamp_pause = "cliamp pause"
+cliamp_play = "cliamp play"
+cliamp_stop = "cliamp stop"
+
 # ── Day-derived values ────────────────────────────────────────────────────────
 current_day = datetime.now().day
 
@@ -132,6 +143,10 @@ COMMANDS: dict[str, str] = {
         "slack",
         "nchat",
         "nets",
+        "cliamp_start",
+        "cliamp_pause",
+        "cliamp_play",
+        "cliamp_stop",
         # Day-derived shortcuts (resolve to a concrete command at import time)
         "even_day_zk",
         "even_day_social",
