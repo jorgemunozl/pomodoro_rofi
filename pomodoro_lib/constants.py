@@ -78,11 +78,13 @@ nets = f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & {open_gmail_
 
 # ── CLIAMP (lofi radio daemon) ─────────────────────────────────────────────────
 # cliamp is a terminal music player; the pomodoro drives it via its IPC CLI.
-# `cliamp --daemon --auto-play` resumes the last stream (the lofi radio,
-# http://radio.cliamp.stream/lofi/stream) headless.
+# The lofi station is loaded explicitly through a tiny playlist (see
+# _ensure_cliamp_playlist in timer.py) instead of relying on cliamp's
+# resume.json, which can point at any previously-played station.
 CLIAMP_LOFI_URL = "http://radio.cliamp.stream/lofi/stream"
+CLIAMP_PLAYLIST = "lofi"
 
-cliamp_start = "cliamp --daemon --auto-play"
+cliamp_start = "cliamp --daemon"
 cliamp_pause = "cliamp pause"
 cliamp_play = "cliamp play"
 cliamp_stop = "cliamp stop"

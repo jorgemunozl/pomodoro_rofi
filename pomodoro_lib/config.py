@@ -4,7 +4,9 @@ Static constants (paths, commands, defaults) live in constants.py;
 this module only holds session-level configuration.
 """
 
+from cProfile import label
 from dataclasses import dataclass
+from tracemalloc import start
 
 from pomodoro_lib.commands import CommandsBuilder
 from pomodoro_lib.constants import (
@@ -180,20 +182,51 @@ EVENT_COMMANDS = cmds.build()
 
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
+    "night_short": StartupPreset(
+        schedule=[
+            [10, 10],  # 20 pomodoro
+            [14, 6],  # 20 pomodoro
+            [12, 8],  # 20 pomodoro
+            [10, 10],  # 20 pomodoro
+            [10, 0],  # 10 pomodoro
+        ],  # total 90 min
+        labels=[
+            "leaving uni, going for eat",  # 10 min
+            "eating, thinking on following tasks",  # 10 min
+            # After 20 min for the eating time phone use
+            "going home time/journaling",  # 14 min
+            "going home time/reflect",  # 6 min
+            "going home time/chess",  # 12 min
+            "going home time/walk to home",  # 8 min
+            # After 40 min reach home 9 pm
+            "being at home/set up at home",  # 10 min
+            "being at home/write core task for tomorrow",  # 10 min
+            "being at home/going to sleep",  # 8 min
+            "brush teeth",  # 0 min
+            # After 30 min at home going to sleep
+        ],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACK),
+        silence_secs=30,
+        description="Preset for 8.00 to 9.30, a light short version of night",
+    ),
     "night": StartupPreset(
         schedule=[
-            [13, 6],  # 18
-            [40, 1],  # 41
-            [10, 1],  # 11
-            [5, 1],  # 6
+            [7, 7],  # 14 journal
+            [6, 0],  # 6 reflect
+            [40, 1],  # 41 tasks
+            [15, 1],  # 16 applications
+            [7, 1],  # 8 budget
             [12, 6],  # 18 chess and metrics
-            [10, 5],  # 11
-            [2, 5],  # 7
-            [5, 0],  # 5
-        ],  # 100
+            [9, 8],  # 17 review arc, write core task for tomorrow
+            [4, 2],  # 6 tidy around,
+            [2, 2],  # 4 pray at bed
+        ],  # 130
         labels=[
-            "journal",  # 13 min
-            "reflect",  # 6 min
+            "journal/day",  # 7 min
+            "journal/work",  # 7 min
+            "reflect two notes",  # 6 min
+            "gap",  # 0
             "personal tasks",  # 40 min
             "prepare applications",  # 1
             "applications",  # 10 min
@@ -202,12 +235,12 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "prepare chess",  # 1 min
             "chess",  # 12 min
             "log metrics/write night task for tomorrow and save them",  # 6 min
-            "write core task for tomorrow",  # 10 min
-            "prepare room to go to bed/tidy around/prepare wake up",  # 5 min
+            "review arc",  # 9 min
+            "write core task for tomorrow",  # 8 min
+            "prepare room to go to bed/tidy around/prepare wake up",  # 4 min
             "go bed",  # 2 min, auto turn off in 10 min
-            "pray at bed",  # 5 min
-            "plan thinking tomorrow",  # 5 min
-            "",
+            "pray at bed",  # 2
+            "plan thinking tomorrow",  # 2
         ],
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
@@ -261,7 +294,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             [4, 3],  # 7
             [21, 5],  # 27
             [21, 5],  # 26
-        ],
+        ],  # total 60 min
         labels=[
             "pray",  # 4
             "prepare myself for the morning",  # 3
@@ -332,23 +365,32 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         labels=["cleaning, washing"],
         switches=[],
         start_dir=str(ARC_CLEANING),
-        silence_secs=0,
+        silence_secs=20,
         description="cleaning",
         commands={
             "session_start": [cleaning],
         },
     ),
     "phone_morning": StartupPreset(
-        schedule=[[]],
+        schedule=[
+            [10, 10],  # 20 min
+            [40, 30],  # 70 min
+            [20, 10],  # 10 min
+        ],  # Total 120
         labels=[
-            "going to take the bus",
-            "wait the bus",
-            "using the bus",
-            "leaving the bus",
+            # Arriving at the university, 60 min
+            "wake up and prepare for going to the university",  # 10 min
+            "walk at metropolitan/praying",  # 10 min
+            "being at the metro/core task develop",  # 40
+            # Eating time and brush teeth, 60 min
+            "wait to eat/core task develop",  # 30 min
+            "eating",  # 20 min
+            "brush teeth",  # 10 min
+            # One hour with the laptop, morning ritual, switch to laptop with warm up preset
         ],
         switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=0,
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        silence_secs=40,
         description="Phone morning when going to the university",
         commands={},
     ),

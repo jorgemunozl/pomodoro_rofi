@@ -14,6 +14,8 @@ from pomodoro_lib.constants import (
     ARC_SOUNDTRACK,
     BELL_30_PLAYED,
     BELL_BEGIN_PLAYED,
+    CLIAMP_LOFI_URL,
+    CLIAMP_PLAYLIST,
     EXTRA_WORK_SECS,
     FINISH_FILE,
     FINISH_PLAYED,
@@ -215,18 +217,72 @@ def mpv_cmd(json_cmd: str) -> bool:
 
 
 def run_cliamp(cmd: str) -> None:
-    """Fire a CLIAMP control command (fire and forget)."""
+    """Fire a CLIAMP control command (fire and forget).
+
+    ``start_new_session=True`` detaches the daemon into its own session so
+    it survives the pomodoro process (e.g. the rofi UI exiting after start,
+    or a terminal being closed).
+    """
     subprocess.Popen(
         cmd,
         shell=True,
+        start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
 
+def _cliamp_running() -> bool:
+    """True if a cliamp daemon is up and reachable via its IPC socket.
+
+    Uses the ``cliamp status`` exit code rather than socket-file existence:
+    a stale socket left by a daemon that died without cleaning up would
+    otherwise make us skip launching a new one.
+    """
+    return (
+        subprocess.run(
+            ["cliamp", "status"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def _ensure_cliamp_playlist() -> None:
+    """Write the lofi playlist that cliamp loads to play the lofi radio.
+
+    `cliamp load <name>` reads ~/.config/cliamp/playlists/<name>.toml, so a
+    tiny playlist points it at the lofi stream. ``realtime = true`` tells
+    cliamp to treat the URL as live radio (reconnect after pause/disconnect).
+    """
+    path = Path.home() / ".config" / "cliamp" / "playlists" / f"{CLIAMP_PLAYLIST}.toml"
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "[[track]]\n"
+        f'path = "{CLIAMP_LOFI_URL}"\n'
+        'title = "Lofi Stream"\n'
+        "realtime = true\n"
+    )
+
+
 def start_cliamp() -> None:
-    """Start the CLIAMP daemon headless (resumes the lofi radio stream)."""
-    run_cliamp(cliamp_start)
+    """Start CLIAMP playback of the lofi station.
+
+    Launches the daemon if needed, then explicitly loads the lofi playlist.
+    Never relies on ``--auto-play`` resume, which would replay whatever
+    station was last playing (resume.json).
+    """
+    _ensure_cliamp_playlist()
+    if not _cliamp_running():
+        run_cliamp(cliamp_start)
+        for _ in range(30):  # wait up to 3s for the daemon socket
+            if _cliamp_running():
+                break
+            time.sleep(0.1)
+    run_cliamp(f"cliamp load {CLIAMP_PLAYLIST} --auto-play")
 
 
 def pause_cliamp() -> None:
