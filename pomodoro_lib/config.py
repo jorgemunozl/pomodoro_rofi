@@ -257,19 +257,19 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
     ),
     "noon_after_eat": StartupPreset(
         schedule=[
-            [5, 3],  # 8
+            [5, 1],  # 6
+            [17, 4],  # 21
             [16, 4],  # 20
-            [16, 4],  # 20
-            [12, 0],  # 12
+            [13, 0],  # 12
         ],
         labels=[
             "pray meditation",  # 3
-            "set-up for first session",  # 3
+            "set-up for personal matter reading",  # 3
+            "personal matter reading",  # 17
+            "first break, next code/polymath session",  # 4
             "code/polymath first session",  # 17
-            "first break",  # 4
-            "code/polymath second session",  # 17
-            "second and last break, prepare for the afternoon",  # 4
-            "code/polymath third session",  # 17
+            "second, preparation for the afternoon",  # 4
+            "code/polymath second session to begin the afternoon",  # 17
             "",
         ],
         switches=[],
@@ -317,7 +317,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             ],
         },
     ),
-    "afternoon": StartupPreset(
+    "afternoon_problem_solving": StartupPreset(
         schedule=[[29, 1], [29, 1]],
         labels=["problem solving", "review", "problem solving", "review"],
         switches=[],
@@ -381,7 +381,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             # Arriving at the university, 60 min
             "wake up and prepare for going to the university",  # 10 min
             "walk at metropolitan/praying",  # 10 min
-            "being at the metro/core task develop",  # 40
+            "being at the metro/core task develop, ai what phone tools I could use in the morning to advance the work?",  # 40
             # Eating time and brush teeth, 60 min
             "wait to eat/core task develop",  # 30 min
             "eating",  # 20 min
