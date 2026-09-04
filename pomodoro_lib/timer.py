@@ -124,6 +124,41 @@ def play_bell(path: Path) -> None:
     )
 
 
+def _slugify(text: str) -> str:
+    """Turn a label into a safe mp3 filename (non-alnum runs → single _)."""
+    slug = "".join(c if c.isalnum() else "_" for c in text)
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_")[:60] or "label"
+
+
+def say_label(say_dir: str, label: str) -> None:
+    """Speak a phase label with gtts, caching the mp3 under say_dir.
+
+    Generates the mp3 with gtts-cli the first time a label is needed, then
+    plays it with a one-shot mpv process. Missing generation (no network)
+    is silently skipped.
+    """
+    if not label or not say_dir:
+        return
+    out_dir = Path(say_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{_slugify(label)}.mp3"
+    if not (out.exists() and out.stat().st_size > 0):
+        subprocess.run(
+            ["gtts-cli", label, "--output", str(out)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if not out.exists():
+            return
+    subprocess.Popen(
+        ["mpv", "--no-terminal", "--no-video", "--volume=130", str(out)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 # ── External tool helpers ─────────────────────────────────────────────────────
 
 
@@ -542,6 +577,8 @@ class TimerController:
         notify_desc: str = "",
         notify_timeout: int = 0,
         notify_phases: dict | None = None,
+        say_label: bool = False,
+        say_dir: str = "",
     ) -> None:
         self.stop()
         # Fresh start: clear the finish guard from any previous session
@@ -567,6 +604,8 @@ class TimerController:
             notify_desc=notify_desc,
             notify_timeout=notify_timeout,
             notify_phases=notify_phases or {},
+            say_label=say_label,
+            say_dir=say_dir,
         )
         self.save_state()
         if cliamp_mode:
@@ -605,6 +644,8 @@ class TimerController:
         # Defensive clear to prevent race conditions
         self._stop_event.clear()
         self._run_timer(total_first_secs, self._on_work_end)
+        # Announce the first phase's label (startup presets with say_label)
+        self._say_current_label()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -804,6 +845,25 @@ class TimerController:
         else:
             mpv_cmd('{"command": ["set_property", "pause", false]}')
 
+    def _say_current_label(self) -> None:
+        """Announce the current phase's label via gtts, if enabled.
+
+        Label indexing matches the status line: work N is label[2(N-1)],
+        break N is label[2(N-1)+1]. Only fires for startup presets that
+        opt in with ``say_label=True`` (their mp3 cache dir is in state).
+        """
+        if not (self.state.say_label and self.state.say_dir):
+            return
+        labels = self.state.schedule_labels or []
+        if not labels or self.state.phase not in ("work", "break"):
+            return
+        if self.state.phase == "break":
+            idx = (self.state.current - 2) * 2 + 1
+        else:
+            idx = (self.state.current - 1) * 2
+        if 0 <= idx < len(labels) and labels[idx]:
+            say_label(self.state.say_dir, str(labels[idx]))
+
     def _transition_work_to_break(self) -> None:
         """Work → break: update state, notify. Does NOT start a timer.
         The video keeps playing uninterrupted across work/break cycles."""
@@ -873,6 +933,9 @@ class TimerController:
         if self._pause_on_break():
             self._pause_audio()
         WORK_BELL_PLAYED.unlink(missing_ok=True)
+
+        # Announce the break's label (startup presets with say_label)
+        self._say_current_label()
 
         # Fire event AFTER state is saved so commands see the updated phase
         self._cmd_runner.run(
@@ -1000,6 +1063,9 @@ class TimerController:
         # Clean up bell flags from the just-ended break
         BELL_30_PLAYED.unlink(missing_ok=True)
         BELL_BEGIN_PLAYED.unlink(missing_ok=True)
+
+        # Announce the new work phase's label (startup presets with say_label)
+        self._say_current_label()
 
         self._notify(
             "🍅 Break over!",

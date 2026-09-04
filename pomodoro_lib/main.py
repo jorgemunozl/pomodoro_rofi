@@ -41,6 +41,7 @@ from pomodoro_lib.constants import (
     POMO_DIR,
     POMODORO_DEFAULTS,
     SKIP_RANDOM_FILE,
+    SOUNDS_DIR,
     STATE_FILE,
     TASKS_FILE,
     TASKS_UNIQUE,
@@ -1854,6 +1855,8 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
         notify_desc=preset.notify_desc,
         notify_timeout=preset.notify_timeout,
         notify_phases=preset.notify_phases or {},
+        say_label=preset.say_label,
+        say_dir=str(SOUNDS_DIR / preset_name) if preset.say_label else "",
     )
 
     # Persist merged commands + audio switches into state so OTHER processes
@@ -2183,7 +2186,8 @@ def _handle_list() -> None:
     print()
     print("🚀 Startup presets (pomodoro <preset>)")
     for name, preset in STARTUP_PRESETS.items():
-        print(f"  {name:<20} {preset.description}")
+        marker = " 🔊" if preset.say_label else ""
+        print(f"  {name:<20} {preset.description}{marker}")
 
     # ── Chains ─────────────────────────────────────────────────────────────
     print()

@@ -39,6 +39,8 @@ class PomodoroState:
     commands: dict = field(
         default_factory=dict
     )  # merged event commands for this session
+    say_label: bool = False  # announce each phase's label via gtts
+    say_dir: str = ""  # cache dir for the preset's label mp3s (SOUNDS_DIR/<preset>)
 
     @property
     def is_active(self) -> bool:
