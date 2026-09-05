@@ -184,52 +184,45 @@ EVENT_COMMANDS = cmds.build()
 
 STARTUP_PRESETS: dict[str, StartupPreset] = {
     "night_outside": StartupPreset(
-        schedule=[
-            [10, 10],  # 20 pomodoro
-            [14, 6],  # 20 pomodoro
-            [12, 8],  # 20 pomodoro
-        ],  # total 60 min
+        schedule=[  # begin at 8.3
+            [7, 7],  # 14 min
+            [7, 7],  # 14 min
+            [6, 10],  # 16 min
+            [12, 8],  # 20 min
+        ],  # total 64 min
         labels=[
-            "leaving uni, going for eat",  # 10 min
-            "eating, thinking on following tasks",  # 10 min
+            "leaving university, going to eat",  # 10 min
+            "eating, thinking on journaling while at the bus",  # 10 min
             # After 20 min for the eating time phone use
-            "journaling",  # 14 min
-            "reflect",  # 6 min
-            "chess",  # 12 min
-            "walk to home quickly",  # 8 min
+            "journaling day time",  # 7 min
+            "journaling work time",  # 7 min min
+            "reflect one note time",  # 6 min
+            "ten minutes daily chess time",  # 12 min
+            "walk to home, thinking on following",  # 8 min
             # After 40 min reach home 9 pm
         ],
         switches=[],
+        say_label=True,
         start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=30,
-        description="Preset for 8.00 to 9.30, a light short version of night",
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="Preset for 8.00 to 9.00, a light short version of night",
     ),
     "night_blitz": StartupPreset(
         schedule=[
-            [
-                5,
-            ],  # 5 pomodoro
-            [
-                14,
-            ],  # 14 pomodoro
-            [
-                12,
-            ],  # 12 pomodoro
+            [7, 1],  # 5 pomodoro
+            [14, 2],  # 14 pomodoro
+            [12, 1],  # 12 pomodoro
         ],  # total 30 min
         labels=[
-            "set up",  # 10 min
-            "eating, thinking on following tasks",  # 10 min
-            # After 20 min for the eating time phone use
-            "going home time/journaling",  # 14 min
-            "going home time/reflect",  # 6 min
-            "going home time/chess",  # 12 min
-            "going home time/walk to home",  # 8 min
-            # After 40 min reach home 9 pm
+            "cleaning hands, face, teeth, and put ourselves light clothes",  # 7 min
+            "prepare backpack for tomorrow",  # 10 min
+            "",  # 14 min
         ],
+        say_label=True,
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=30,
-        description="",
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="Home 40 min between arrive and sleep",
     ),
     "night": StartupPreset(
         schedule=[
@@ -237,25 +230,25 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             [6, 0],  # 6 reflect
             [40, 1],  # 41 tasks
             [15, 1],  # 16 applications
-            [7, 1],  # 8 budget
-            [12, 6],  # 18 chess and metrics
+            [7, 6],  # 13 budget
+            [6, 1],  # 7 break and metrics
             [9, 8],  # 17 review arc, write core task for tomorrow
             [4, 2],  # 6 tidy around,
             [2, 2],  # 4 pray at bed
-        ],  # 130
+        ],  # 124
         labels=[
             "journal/day",  # 7 min
             "journal/work",  # 7 min
-            "reflect two notes",  # 6 min
+            "reflect a single note",  # 6 min
             "gap",  # 0
             "personal tasks",  # 40 min
             "prepare applications",  # 1
             "applications",  # 10 min
             "prepare budget",  # 1 min
             "budget",  # 5 min
-            "prepare chess",  # 1 min
-            "chess",  # 12 min
+            "break 6 min",  # 6 min
             "log metrics/write night task for tomorrow and save them",  # 6 min
+            "prepare review arc",  # 1 min
             "review arc",  # 9 min
             "write core task for tomorrow",  # 8 min
             "prepare room to go to bed/tidy around/prepare wake up",  # 4 min
@@ -270,11 +263,31 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         commands={
             "session_complete": [f"sleep 60; {shutdown_command}"],
             "session_start": [journal],
-            "pomodoro_done": [
-                [open_chess, 4],
-            ],
         },
         notify_color="blue",
+    ),
+    "noon_main": StartupPreset(
+        schedule=[
+            [5, 7],  # 12
+            [13, 2],  # 15
+            [11, 2],  # 13
+            [19, 1],  # 20
+        ],  # 60 min
+        say_label=True,
+        labels=[
+            "personal matter reading",  # 14
+            "predict the future work",  # 7
+            "spaced repetition session one",  # 13
+            "spaced repetition break",  # 2
+            "spaced repetition session two",  # 13
+            "set up for the afternoon",  # 4
+            "code/polymath anticipating the afternoon",  # 17
+            "afternoon warm up",
+        ],
+        switches=[],
+        start_dir=str(ARC_SOUNDTRACKS_PAST),
+        silence_secs=ARC_SILENCE_SECONDS,
+        description="after nap",
     ),
     "noon_after_eat": StartupPreset(
         schedule=[
@@ -298,6 +311,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         silence_secs=ARC_SILENCE_SECONDS,
         description="noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
         notify_color="blue",
+        say_label=True,
         commands={
             "session_start": [
                 open_zed

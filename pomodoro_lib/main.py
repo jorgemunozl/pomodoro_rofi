@@ -1792,9 +1792,48 @@ def _run_session_loop(ctrl: TimerController) -> bool:
         return True
 
 
-def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
-    """Start a startup preset session. Returns the controller (no polling)."""
+def _parse_from_option(extra: list[str]) -> int:
+    """Parse '--from N' (1-based schedule index) from trailing CLI args.
+
+    Returns 1 when the option is absent.
+    """
+    if not extra:
+        return 1
+    if len(extra) == 2 and extra[0] == "--from":
+        try:
+            n = int(extra[1])
+        except ValueError:
+            n = 0
+        if n < 1:
+            print(
+                "Error: --from needs a positive schedule index (1-based).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return n
+    print("usage: pomodoro <preset> [--from N]", file=sys.stderr)
+    sys.exit(1)
+
+
+def _start_preset_session(
+    preset_name: str, tm: TaskManager, from_schedule: int = 1
+) -> TimerController:
+    """Start a startup preset session, optionally at a later schedule entry.
+
+    *from_schedule* is 1-based: 1 = normal start, N = begin at the Nth
+    schedule entry, skipping the earlier ones. The session counter, labels,
+    and event commands keep their absolute numbers.
+    """
     preset = STARTUP_PRESETS[preset_name]
+
+    total = len(preset.schedule)
+    if not 1 <= from_schedule <= total:
+        print(
+            f"Error: --from must be between 1 and {total} "
+            f"('{preset_name}' has {total} schedule entries).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Merge global EVENT_COMMANDS with the preset's own commands
     preset_runner = CommandRunner.merge(
@@ -1808,8 +1847,7 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
         cmd_runner=preset_runner,
     )
 
-    first_work, first_break = preset.schedule[0]
-    total = len(preset.schedule)
+    first_work, first_break = preset.schedule[from_schedule - 1]
 
     # ── Determine start mode from start_dir ────────────────────────────────
     # Directory → arc_mode (build shuffled playlist from directory contents)
@@ -1857,6 +1895,7 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
         notify_phases=preset.notify_phases or {},
         say_label=preset.say_label,
         say_dir=str(SOUNDS_DIR / preset_name) if preset.say_label else "",
+        start_session=from_schedule,
     )
 
     # Persist merged commands + audio switches into state so OTHER processes
@@ -1867,7 +1906,13 @@ def _start_preset_session(preset_name: str, tm: TaskManager) -> TimerController:
         state.arc_switches = preset.switches
     state.save(STATE_FILE)
 
-    print(f"\U0001f345 {preset_name}: {preset.description}")
+    if from_schedule > 1:
+        print(
+            f"\U0001f345 {preset_name} [{from_schedule}/{total}]: "
+            f"{preset.description} (skipped {from_schedule - 1} earlier)"
+        )
+    else:
+        print(f"\U0001f345 {preset_name}: {preset.description}")
     return ctrl
 
 
@@ -1984,8 +2029,12 @@ def _handle_chain(name: str) -> None:
     print(f"\n⛓  Chain '{name}' complete! \U0001f389")
 
 
-def _handle_startup_preset(name: str) -> None:
-    """Start a pre-configured startup pomodoro session."""
+def _handle_startup_preset(name: str, from_schedule: int = 1) -> None:
+    """Start a pre-configured startup pomodoro session.
+
+    *from_schedule* (1-based) begins at a later schedule entry, skipping the
+    earlier ones.
+    """
     if STATE_FILE.exists():
         state = PomodoroState.load(STATE_FILE)
         print(
@@ -1998,7 +2047,7 @@ def _handle_startup_preset(name: str) -> None:
     tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
     tm.init_defaults(DEFAULT_TASKS)
 
-    ctrl = _start_preset_session(name, tm)
+    ctrl = _start_preset_session(name, tm, from_schedule)
     _run_session_loop(ctrl)
 
 
@@ -2242,7 +2291,7 @@ def _run_subcommand(args: list[str]) -> None:
     elif cmd == "skip_random":
         SKIP_RANDOM_FILE.touch()
     elif cmd in STARTUP_PRESETS:
-        _handle_startup_preset(cmd)
+        _handle_startup_preset(cmd, _parse_from_option(args[1:]))
     elif cmd in CHAINS:
         _handle_chain(cmd)
     else:

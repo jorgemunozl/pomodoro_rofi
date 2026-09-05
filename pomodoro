@@ -12,6 +12,8 @@ Usage:
     pomodoro start [options]            Start a session with CLI arguments
     pomodoro startup                    Start the ARC startup preset
                                         (15m polymath → 2m set-up → 13m applications)
+    pomodoro <preset> [--from N]        Run a preset; --from N starts at the Nth
+                                        schedule entry (1-based), skipping earlier ones
     pomodoro <chain>                    Run a chain of sessions back-to-back
                                         (see CHAINS in pomodoro_lib/config.py)
     pomodoro --task <name> --video <file> [options]   (shorthand, same as start)

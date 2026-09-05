@@ -30,7 +30,7 @@ PUSH_UPS_FILE = SOUNDS_DIR / "push_ups.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current-arc"
 ARC_CLEANING = Path.home() / "Videos" / "workout" / "rollouts" / "cleaning"
-ARC_SILENCE_SECONDS = 35  # seconds of silence between arc tracks
+ARC_SILENCE_SECONDS = 300  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
 
 ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"

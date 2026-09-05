@@ -138,6 +138,10 @@ def say_label(say_dir: str, label: str) -> None:
     Generates the mp3 with gtts-cli the first time a label is needed, then
     plays it with a one-shot mpv process. Missing generation (no network)
     is silently skipped.
+
+    Blocks until the speech finishes (up to 6 seconds) so the announcement
+    is fully heard even when the caller is a short-lived transition process
+    (e.g. polybar's ``pomodoro status``).
     """
     if not label or not say_dir:
         return
@@ -152,11 +156,15 @@ def say_label(say_dir: str, label: str) -> None:
         )
         if not out.exists():
             return
-    subprocess.Popen(
+    proc = subprocess.Popen(
         ["mpv", "--no-terminal", "--no-video", "--volume=130", str(out)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass  # long speech: keep playing, never block a phase past the cap
 
 
 # ── External tool helpers ─────────────────────────────────────────────────────
@@ -579,6 +587,7 @@ class TimerController:
         notify_phases: dict | None = None,
         say_label: bool = False,
         say_dir: str = "",
+        start_session: int = 1,
     ) -> None:
         self.stop()
         # Fresh start: clear the finish guard from any previous session
@@ -590,7 +599,7 @@ class TimerController:
             work_min=work_min,
             break_min=break_min,
             total=total,
-            current=1,
+            current=start_session,
             video=video,
             phase="work",
             warm_up_secs=warm_up_secs,
@@ -618,7 +627,7 @@ class TimerController:
             work_min=work_min,
             break_min=break_min,
             total=total,
-            session=0,
+            session=start_session - 1,
             video=video,
         )
         # First pomodoro begins
@@ -628,17 +637,17 @@ class TimerController:
             work_min=work_min,
             break_min=break_min,
             total=total,
-            session=0,
+            session=start_session - 1,
             video=video,
         )
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         self._notify(
             "🍅 Pomodoro started",
-            f"{task} — session 1/{total}\n"
+            f"{task} — session {start_session}/{total}\n"
             f"{warmup_note}{work_min}min focus — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
             phase="start",
-            session=0,
+            session=start_session - 1,
         )
 
         # Defensive clear to prevent race conditions
