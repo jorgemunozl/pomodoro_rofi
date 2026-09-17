@@ -228,7 +228,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         schedule=[
             [7, 7],  # 14 journal
             [6, 0],  # 6 reflect
-            [40, 1],  # 41 tasks
+            #[40, 1],  # 41 tasks
             [15, 1],  # 16 applications
             [7, 6],  # 13 budget
             [6, 1],  # 7 break and metrics
@@ -240,13 +240,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "journal/day",  # 7 min
             "journal/work",  # 7 min
             "reflect a single note",  # 6 min
-            "gap",  # 0
-            "personal tasks",  # 40 min
-            "prepare applications",  # 1
-            "applications",  # 10 min
+            "gap",  # 0 - 20 sub total
+            # "personal tasks",  # 40 min
+            # "prepare applications",  # 1
+            "applications",  # 15 min
             "prepare budget",  # 1 min
-            "budget",  # 5 min
-            "break 6 min",  # 6 min
+            "budget",  # 7 min
+            "break 6 min",  # 6 min - 70 min
             "log metrics/write night task for tomorrow and save them",  # 6 min
             "prepare review arc",  # 1 min
             "review arc",  # 9 min
@@ -254,8 +254,8 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "prepare room to go to bed/tidy around/prepare wake up",  # 4 min
             "go bed",  # 2 min, auto turn off in 10 min
             "pray at bed",  # 2
-            "plan thinking tomorrow",  # 2
-        ],
+            "plan thinking tomorrow",  # 2 30 sub total
+        ], # 140 min = 2 hours + 20 min; without personal task this becomes 1.39! Maybe after accumulate task i can dedicate two hours to make all of them, and then forget about them about two weeks!
         switches=[],
         start_dir=str(ARC_SOUNDTRACK),
         silence_secs=ARC_SILENCE_SECONDS,
