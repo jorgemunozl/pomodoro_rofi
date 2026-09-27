@@ -41,30 +41,6 @@ def rofi_menu(
     return _rofi(prompt, options, no_custom=no_custom)
 
 
-def numbered_menu(
-    prompt: str, items: list[str], *, add_back: bool = True
-) -> str | None:
-    """Show numbered list (1. item, 2. item, ...). Returns raw selection or None."""
-    lines = [f"{i + 1}. {item}" for i, item in enumerate(items)]
-    if add_back:
-        lines.append(BACK_LABEL)
-    return _rofi(prompt, lines, no_custom=add_back)
-
-
-def strip_number(selection: str) -> str:
-    """Remove leading 'N. ' from a numbered-menu selection."""
-    import re
-
-    return re.sub(r"^\d+\.\s*", "", selection)
-
-
-def pick_task(
-    items: list[str], prompt: str = "Pick task", add_back: bool = True
-) -> str | None:
-    """Pick a task from a numbered list."""
-    return numbered_menu(prompt, items, add_back=add_back)
-
-
 def _ensure_back_thumb() -> str:
     """Generate a back-arrow thumbnail for the video picker's Back entry.
 

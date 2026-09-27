@@ -16,10 +16,9 @@ Usage:
                                         schedule entry (1-based), skipping earlier ones
     pomodoro <chain>                    Run a chain of sessions back-to-back
                                         (see CHAINS in pomodoro_lib/config.py)
-    pomodoro --task <name> --video <file> [options]   (shorthand, same as start)
+    pomodoro --video <file> [options]   (shorthand, same as start)
 
 Options (for start / direct flags):
-    --task, -t   <name>                Task name (required)
     --video, -v  <filename>            Video filename, "random", "arc" for CURRENT_ARC,
                                       "past_arc", or "cliamp" for the lofi radio
     --rhythm, -r <rhythm>              "default" or "work-break" (e.g. "25-5")
@@ -28,16 +27,16 @@ Options (for start / direct flags):
     --audio, -a                        Play audio only (no video, uses mp3)
 
 Examples:
-    pomodoro --task "read" --video "study.mp4"
-    pomodoro start --task "read" --video "study.mp4"
-    pomodoro -t "read" -v "study.mp4" -r "50-10" -c 4 -w 60
-    pomodoro --task "write" --video "shinjuku.webm" --rhythm default
-    pomodoro --task "read" --video random            # random video + its default rhythm
-    pomodoro -t "code" -v random -r "50-10" -c 3     # random video, custom rhythm
-    pomodoro --task "read" --video random --audio     # random video, audio only
-    pomodoro -t "write" -v "study.mp4" -a            # study.mp4, audio only
-    pomodoro --task "arc_read" --video arc            # CURRENT_ARC soundtrack
-    pomodoro -t "arc" -v CURRENT_ARC -r "30-6" -c 2  # arc + custom rhythm
+    pomodoro --video "study.mp4"
+    pomodoro start --video "study.mp4"
+    pomodoro --video "study.mp4" -r "50-10" -c 4 -w 60
+    pomodoro --video "shinjuku.webm" --rhythm default
+    pomodoro --video random                         # random video + default rhythm
+    pomodoro --video random -r "50-10" -c 3        # random video, custom rhythm
+    pomodoro --video random --audio                 # random video, audio only
+    pomodoro --video "study.mp4" -a                # study.mp4, audio only
+    pomodoro --video arc                            # CURRENT_ARC soundtrack
+    pomodoro --video CURRENT_ARC -r "30-6" -c 2    # arc + custom rhythm
     pomodoro startup                                  # ARC startup preset (10s gaps)
 """
 

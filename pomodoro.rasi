@@ -3,7 +3,7 @@
  * Drop in: ~/.config/rofi/pomodoro.rasi
  *
  * Palette: tomato red + stem green on warm dark.
- * "The kitchen timer" — rounded, tactile, one task at a time.
+ * "The kitchen timer" — rounded, tactile, one session at a time.
  */
 
 configuration {

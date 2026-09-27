@@ -100,16 +100,11 @@ _timer.mpv_cmd = lambda *a: False  # no IPC socket on phone
 from pomodoro_lib.commands import CommandRunner, CommandsBuilder
 from pomodoro_lib.config import EVENT_COMMANDS, STARTUP_PRESETS
 from pomodoro_lib.constants import (
-    DEFAULT_TASKS,
-    HISTORY_FILE,
     POMO_DIR,
     POMODORO_DEFAULTS,
     STATE_FILE,
-    TASKS_FILE,
-    TASKS_UNIQUE,
 )
 from pomodoro_lib.state import PomodoroState
-from pomodoro_lib.tasks import TaskManager
 from pomodoro_lib.timer import TimerController, notify
 
 _cmd_runner = CommandRunner(EVENT_COMMANDS)
@@ -125,7 +120,7 @@ def _status_line() -> str:
     mins = state.remaining_seconds // 60
     secs = state.remaining_seconds % 60
     icon = {"work": "▶", "break": "☕", "reflect": "🤔"}.get(state.phase, "•")
-    return f"{icon} {mins:02d}:{secs:02d}  {state.task}  {state.current}/{state.total}"
+    return f"{icon} {mins:02d}:{secs:02d}  {state.current}/{state.total}"
 
 
 def _lookup_default_rhythm(video_name: str):
@@ -158,7 +153,6 @@ def _lookup_default_rhythm(video_name: str):
 
 def _handle_start(args: list[str]) -> None:
     """Start a session from CLI args (same syntax as desktop)."""
-    task = None
     rhythm = None
     count = None
     audio = False
@@ -167,10 +161,7 @@ def _handle_start(args: list[str]) -> None:
     i = 0
     while i < len(args):
         a = args[i]
-        if a in ("--task", "-t"):
-            task = args[i + 1]
-            i += 1
-        elif a in ("--rhythm", "-r"):
+        if a in ("--rhythm", "-r"):
             rhythm = args[i + 1]
             i += 1
         elif a in ("--count", "-c"):
@@ -180,8 +171,7 @@ def _handle_start(args: list[str]) -> None:
             audio = True
         i += 1
 
-    task = task or "pomodoro"
-    work_min, break_min, total = 25, 5, count or 1
+    work_min, break_min, total = 50, 10, count or 2
     schedule = None
 
     if rhythm and rhythm.lower() != "default":
@@ -201,7 +191,6 @@ def _handle_start(args: list[str]) -> None:
 
     ctrl = TimerController(cmd_runner=_cmd_runner)
     ctrl.start(
-        task=task,
         video="",
         work_min=work_min,
         break_min=break_min,
@@ -212,9 +201,9 @@ def _handle_start(args: list[str]) -> None:
         arc_mode=False,
     )
 
-    notify("🍅 Pomodoro started", f"{task} — {work_min}min × {total}")
+    notify("🍅 Pomodoro started", f"{work_min}min × {total}")
 
-    print(f"🍅 {task} — {work_min}min × {total}")
+    print(f"🍅 {work_min}min × {total}")
     print("  pomodoro_phone status / stop / next / toggle")
     sys.exit(0)
 
@@ -258,7 +247,6 @@ def _handle_startup_preset(name: str) -> None:
     ctrl = TimerController(cmd_runner=preset_runner)
 
     ctrl.start(
-        task="startup",
         video=preset.start_dir or "",
         work_min=first_work,
         break_min=first_break,
@@ -292,7 +280,7 @@ def main() -> None:
 
     if not args:
         print("pomodoro_phone — Termux pomodoro timer")
-        print("  start --task <name> [-r 25-5] [-c 4] [-a]")
+        print("  start [-r 50-10] [-c 2] [-a]")
         print("  status  |  stop  |  next  |  toggle")
         print("  startup | startup2 | ...  (presets)")
         print("  random  (hands-free shuffle)")

@@ -1,12 +1,5 @@
-"""Presets, chains, and event commands for the pomodoro timer.
-
-Static constants (paths, commands, defaults) live in constants.py;
-this module only holds session-level configuration.
-"""
-
-from cProfile import label
+# flake8: noqa
 from dataclasses import dataclass
-from tracemalloc import start
 
 from pomodoro_lib.commands import CommandsBuilder
 from pomodoro_lib.constants import (
@@ -14,23 +7,14 @@ from pomodoro_lib.constants import (
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
     ARC_SOUNDTRACKS_PAST,
-    ARC_STARTUP,
-    POMO_DIR,
     PUSH_UPS_FILE,
     SOUNDS_DIR,
     calendly,
     cleaning,
-    even_day_label,
-    even_day_social,
-    even_day_social_label,
-    even_day_zk,
     journal,
     nets,
-    odd_day_label,
-    odd_day_zk,
     open_chess,
     open_dawn,
-    open_shinjuku_2,
     open_tired,
     open_zed,
     open_zk,
@@ -41,13 +25,12 @@ from pomodoro_lib.constants import (
 @dataclass
 class StartupPreset:
     """A pre-configured startup pomodoro session."""
-
-    schedule: list  # [[work_min, break_min], ...]  — last break is ignored
-    labels: list  # per-phase polybar labels (shorter than schedule → fallback)
-    switches: list  # [[at_pomodoro, path, arc_mode?], ...]
-    start_dir: str  # initial ARC directory or video path
-    silence_secs: int  # silence between ARC tracks
-    description: str  # one-line summary for the terminal
+    schedule: list  
+    labels: list
+    switches: list 
+    start_dir: str
+    silence_secs: int
+    description: str 
     commands: dict[str, list] | None = (
         None  # per-preset event commands (str or [cmd, idx])
     )
@@ -63,39 +46,9 @@ class StartupPreset:
 
 @dataclass
 class Chain:
-    """A sequence of pomodoro sessions that run back-to-back.
-
-    Each step is either:
-
-    * A **video filename** — e.g. ``"study.mp4"``. Runs that video using its
-      default rhythm from POMODORO_DEFAULTS (fallback 25-5 × 1). The task name
-      is derived from the video stem.
-    * A **preset name** — e.g. ``"morning"``. Runs a full STARTUP_PRESETS entry
-      with its own schedule, labels, and commands.
-    * A **``(task, item)`` tuple** — same as the two above, but with a custom
-      task name, e.g. ``("deep work", "brain_fm.mp4")``.
-    * A **list of steps** — e.g. ``["dawn_2025_II.mp4", "brain_fm.mp4"]``.
-      The element is chosen by day of month: ``day % len(list)`` selects the
-      index (a day that is a multiple of the length → first element, +1 →
-      second, …). Each element may itself be a video/preset name or a
-      ``(task, item)`` tuple. The tuple form also accepts a list as *item*,
-      e.g. ``("deep work", ["a.mp4", "b.mp4"])``, to cycle a fixed task
-      between videos by day.
-
-    Example::
-
-        Chain(
-            steps=["dawn_2025_II.mp4", ["a.mp4", "b.mp4"], "morning"],
-            description="dawn → day-cycled study → morning preset",
-        )
-    """
-
     steps: list
     description: str = ""
 
-
-# ── Pomodoro chains ──────────────────────────────────────────────────────
-# Run with:  pomodoro <chain_name>
 
 CHAINS: dict[str, Chain] = {
     "morning": Chain(
@@ -115,52 +68,7 @@ CHAINS: dict[str, Chain] = {
     ),
 }
 
-
-# ── Event-driven commands ────────────────────────────────────────────────────
-# Each event maps to a list of entries.  An entry is either:
-#
-#   * A plain **string** — fires every time the event occurs.
-#   * A **list [command, index]** — fires only when `session` equals *index*
-#     (0-based: 0 = first pomodoro, 1 = second, …).
-#   * A **list [command, "every:N"]** — fires every N sessions
-#     (at session 0, N, 2N, …).  Ideal for recurring breaks like push-ups.
-#
-# Available events (from pomodoro_lib.commands):
-#   session_start, pomodoro_begin, pomodoro_done, break_done, session_complete
-#   bell_30, bell_begin, bell_end
-#
-# Context variables available for {variable} substitution:
-#   task, work_min, break_min, session, total, phase, video
-#
-# Example:
-#   EVENT_COMMANDS = {
-#       "pomodoro_done": [
-#           'notify-send "Pomodoro {session}/{total} done!"',
-#           ["echo 'first pomodoro!' >> /tmp/pomo.log", 0],  # session 0 only
-#           ["notify-send '⚡ Halfway!'", 2],                 # session 2 only
-#           ["echo '💪 Push ups!' >> /tmp/pomo.log", "every:2"],  # every 2
-#       ],
-#       "break_done": [
-#           ["notify-send '☕ Break after first pomo'", 0],   # break after session 0
-#       ],
-#       "session_complete": [
-#           'mpv --no-terminal --no-video ~/sounds/cheer.mp3',
-#       ],
-#   }
-
-# ── Flags ─────────────────────────────────────────────────────────────────────
-# Toggle these to enable/disable common behaviours without editing every preset.
-
 ANNOUNCE_TIME_ON_DONE: bool = False
-"""When True, speaks the current time via gtts-cli after every pomodoro.
-
-This is injected into the global EVENT_COMMANDS under ``pomodoro_done``,
-so it fires for ALL sessions and presets. Set to ``False`` to disable.
-"""
-
-
-# ── Build EVENT_COMMANDS ──────────────────────────────────────────────────────
-# Uses CommandsBuilder for a clean declarative API.
 
 _SAY_TIME = (
     f'F="{SOUNDS_DIR}/say_time_$(date +%I_%M_%p).mp3"; '
@@ -185,95 +93,93 @@ EVENT_COMMANDS = cmds.build()
 STARTUP_PRESETS: dict[str, StartupPreset] = {
     "night_outside": StartupPreset(
         schedule=[  # begin at 8.3
-            [7, 7],  # 14 min
-            [7, 7],  # 14 min
+            [7,  7],  # 14 min
+            [7,  7],  # 14 min
             [6, 10],  # 16 min
             [12, 8],  # 20 min
         ],  # total 64 min
         labels=[
-            "leaving university, going to eat",  # 10 min
+            "leaving university, going to eat",                 # 10 min
             "eating, thinking on journaling while at the bus",  # 10 min
-            # After 20 min for the eating time phone use
-            "journaling day time",  # 7 min
-            "journaling work time",  # 7 min min
-            "reflect one note time",  # 6 min
-            "ten minutes daily chess time",  # 12 min
-            "walk to home, thinking on following",  # 8 min
+            "journaling day time",                              # 7 min
+            "journaling work time",                             # 7 min min
+            "reflect one note time",                            # 6 min
+            "ten minutes daily chess time",                     # 12 min
+            "walk to home, thinking on following",              # 8 min
             # After 40 min reach home 9 pm
         ],
-        switches=[],
-        say_label=True,
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="Preset for 8.00 to 9.00, a light short version of night",
+        switches     = [],
+        say_label    = True,
+        start_dir    = str(ARC_SOUNDTRACK),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "Preset for 8.00 to 9.00, a light short version of night",
     ),
     "night_blitz": StartupPreset(
         schedule=[
-            [7, 1],  # 5 pomodoro
+            [7,  1],  # 5 pomodoro
             [14, 2],  # 14 pomodoro
             [12, 1],  # 12 pomodoro
         ],  # total 30 min
         labels=[
             "cleaning hands, face, teeth, and put ourselves light clothes",  # 7 min
-            "prepare backpack for tomorrow",  # 10 min
-            "",  # 14 min
+            "prepare backpack for tomorrow",                                 # 10 min
+            "",                                                              # 14 min
         ],
-        say_label=True,
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="Home 40 min between arrive and sleep",
+        say_label    = True,
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACK),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "Home 40 min between arrive and sleep",
     ),
     "night": StartupPreset(
         schedule=[
-            [7, 7],  # 14 journal
-            [6, 0],  # 6 reflect
-            #[40, 1],  # 41 tasks
-            [15, 1],  # 16 applications
-            [7, 6],  # 13 budget
-            [6, 1],  # 7 break and metrics
-            [9, 8],  # 17 review arc, write core task for tomorrow
-            [4, 2],  # 6 tidy around,
-            [2, 2],  # 4 pray at bed
+            [7,  7],  # 14 :journal
+            [6,  1],  # 6  :reflect
+            [15, 1],  # 16 :applications
+            [7,  6],  # 13 :budget
+            [6,  1],  # 7  :break and metrics
+            [9,  8],  # 17 :review arc, write core task for tomorrow
+            [4,  2],  # 6  :tidy around,
+            [2,  2],  # 4  :pray at bed
         ],  # 124
         labels=[
-            "journal/day",  # 7 min
-            "journal/work",  # 7 min
-            "reflect a single note",  # 6 min
-            "gap",  # 0 - 20 sub total
-            # "personal tasks",  # 40 min
-            # "prepare applications",  # 1
-            "applications",  # 15 min
-            "prepare budget",  # 1 min
-            "budget",  # 7 min
-            "break 6 min",  # 6 min - 70 min
-            "log metrics/write night task for tomorrow and save them",  # 6 min
-            "prepare review arc",  # 1 min
-            "review arc",  # 9 min
-            "write core task for tomorrow",  # 8 min
-            "prepare room to go to bed/tidy around/prepare wake up",  # 4 min
-            "go bed",  # 2 min, auto turn off in 10 min
-            "pray at bed",  # 2
-            "plan thinking tomorrow",  # 2 30 sub total
-        ], # 140 min = 2 hours + 20 min; without personal task this becomes 1.39! Maybe after accumulate task i can dedicate two hours to make all of them, and then forget about them about two weeks!
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="night when at home, begin programatically at 7:30 pm finish at 9:30, thus wake up at 5:00",
-        commands={
+            "journal/day",                 # 7
+            "journal/work",                # 7
+            "reflect a single note",       # 6
+            "gap",                         # 0
+            "applications",                # 15
+            "prepare budget",              # 1
+            "budget",                      # 7
+            "break 6 min",                 # 6
+            "log metrics",                 # 6
+            "prepare review arc",          # 1
+            "review arc",                  # 9
+            "write core task for tomorrow",  # 8
+            "tidy",                        # 4
+            "go bed",                      # 2
+            "pray at bed",                 # 2
+            "plan thinking tomorrow",      # 2
+        ],                                 # total: 20
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACK),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "night when at home, begin programatically" \
+        " at 7:30 pm finish at 9:30, thus wake up at 5:00",
+        commands     =
+        {
             "session_complete": [f"sleep 60; {shutdown_command}"],
             "session_start": [journal],
         },
-        notify_color="blue",
+        notify_color  = "blue",
     ),
     "noon_main": StartupPreset(
         schedule=[
-            [5, 7],  # 12
+            [5,  7],  # 12
             [13, 2],  # 15
             [11, 2],  # 13
             [19, 1],  # 20
         ],  # 60 min
-        say_label=True,
+        say_label    = True,
         labels=[
             "personal matter reading",  # 14
             "predict the future work",  # 7
@@ -284,14 +190,14 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "code/polymath anticipating the afternoon",  # 17
             "afternoon warm up",
         ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="after nap",
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACKS_PAST),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "after nap",
     ),
     "noon_after_eat": StartupPreset(
         schedule=[
-            [5, 1],  # 6
+            [5,  1],  # 6
             [17, 4],  # 21
             [16, 4],  # 20
             [13, 0],  # 12
@@ -306,13 +212,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "code/polymath second session to begin the afternoon",  # 17
             "",
         ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
-        notify_color="blue",
-        say_label=True,
-        commands={
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACKS_PAST),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "noon, 12:40 until 1:40 then around 4:30 meaning ends 6:10",
+        notify_color = "blue",
+        say_label    = True,
+        commands     = {
             "session_start": [
                 open_zed
             ],  # only once, at the very beginning (plain string)
@@ -337,8 +243,8 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "break",
             "third",
         ],
-        switches=[],
-        commands={
+        switches     = [],
+        commands     = {
             "session_start": [
                 open_zk
             ],  # only once, at the very beginning (plain string)
@@ -346,13 +252,13 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                 [nets, 2],  # after 3rd pomodoro
             ],
         },
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="one hour morning",
+        start_dir    = str(ARC_SOUNDTRACK),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "one hour morning",
     ),
     "morning_wake_up": StartupPreset(
         schedule=[
-            [4, 3],  # 7
+            [4,  3],  # 7
             [21, 5],  # 27
             [21, 5],  # 26
         ],  # total 60 min
@@ -364,12 +270,12 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "polymath second session, morning warm up",  # 21
             "schedule the morning",  # 4
         ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="morning winter ritual",
-        notify_color="yellow",
-        commands={
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACK),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "morning winter ritual",
+        notify_color = "yellow",
+        commands     = {
             "session_start": [
                 open_zk
             ],  # only once, at the very beginning (plain string)
@@ -379,24 +285,38 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         },
     ),
     "afternoon_problem_solving": StartupPreset(
-        schedule=[[29, 1], [29, 1]],
-        labels=["problem solving", "review", "problem solving", "review"],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
-        silence_secs=ARC_SILENCE_SECONDS,
-        description="afternoon of problem solving from four to six, once each two days I think that is proper",
+        schedule=[
+            [29, 1],
+            [29, 1],
+        ],
+        labels=[
+            "problem solving",
+            "review",
+            "problem solving",
+            "review",
+        ],
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACKS_PAST),
+        silence_secs = ARC_SILENCE_SECONDS,
+        description  = "afternoon of problem solving from four to six, once each two days I think that is proper",
     ),
     "test": StartupPreset(
-        schedule=[[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]],
-        labels=["test"],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACK),
-        silence_secs=0,
-        notify_color="green",
-        notify_desc="eso tilin",
-        notify_title="a la mrd",
-        description="asd",
-        commands={
+        schedule=[
+            [0.1, 0.1],
+            [0.1, 0.1],
+            [0.1, 0.1],
+        ],
+        labels=[
+            "test",
+        ],
+        switches      = [],
+        start_dir     = str(ARC_SOUNDTRACK),
+        silence_secs  = 0,
+        notify_color  = "green",
+        notify_desc   = "eso tilin",
+        notify_title  = "a la mrd",
+        description   = "asd",
+        commands      = {
             "session_start": [
                 calendly
             ],  # only once, at the very beginning (plain string)
@@ -409,7 +329,7 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
                 f"sleep 2; {open_dawn}",
             ],
         },
-        notify_phases={
+        notify_phases = {
             # Same style as commands: plain dict → always, [dict, int] → indexed
             "pomodoro_done": [
                 {"title": "✅ wow tilin", "timeout": 4000},
@@ -422,13 +342,17 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
         },
     ),
     "cleaning": StartupPreset(
-        schedule=[[25, 0]],
-        labels=["cleaning, washing"],
-        switches=[],
-        start_dir=str(ARC_CLEANING),
-        silence_secs=20,
-        description="cleaning",
-        commands={
+        schedule=[
+            [25, 0],
+        ],
+        labels=[
+            "cleaning, washing",
+        ],
+        switches     = [],
+        start_dir    = str(ARC_CLEANING),
+        silence_secs = 20,
+        description  = "cleaning",
+        commands     = {
             "session_start": [cleaning],
         },
     ),
@@ -449,10 +373,10 @@ STARTUP_PRESETS: dict[str, StartupPreset] = {
             "brush teeth",  # 10 min
             # One hour with the laptop, morning ritual, switch to laptop with warm up preset
         ],
-        switches=[],
-        start_dir=str(ARC_SOUNDTRACKS_PAST),
-        silence_secs=40,
-        description="Phone morning when going to the university",
-        commands={},
+        switches     = [],
+        start_dir    = str(ARC_SOUNDTRACKS_PAST),
+        silence_secs = 40,
+        description  = "Phone morning when going to the university",
+        commands     = {},
     ),
 }

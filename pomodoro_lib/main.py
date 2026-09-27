@@ -1,6 +1,5 @@
 """CLI entry point — main menu loop, subcommands, and UI flow."""
 
-import re
 import subprocess
 import sys
 import time
@@ -29,10 +28,8 @@ from pomodoro_lib.constants import (
     COUNT_OPTIONS,
     CUSTOM_LABEL,
     DATA_DIR,
-    DEFAULT_TASKS,
     DURATION_PRESETS,
     EXTRA_WORK_SECS,
-    HISTORY_FILE,
     INCLUDE_DURATION_FILES,
     MPV_SOCKET,
     PAST_ARC_FILE,
@@ -43,18 +40,13 @@ from pomodoro_lib.constants import (
     SKIP_RANDOM_FILE,
     SOUNDS_DIR,
     STATE_FILE,
-    TASKS_FILE,
-    TASKS_UNIQUE,
     WORK_BELL_PLAYED,
 )
 from pomodoro_lib.rofi import (
-    numbered_menu,
     pick_video,
     rofi_menu,
-    strip_number,
 )
 from pomodoro_lib.state import PomodoroState
-from pomodoro_lib.tasks import TaskManager
 from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_bell
 
 # ── Shared command runner (wired from EVENT_COMMANDS) ────────────────────────
@@ -118,11 +110,7 @@ def _status_line() -> str:
     # Rebuild the preset-aware runner from state so preset commands fire
     # even when this transition is handled by a different process (polybar).
     runner = _runner_for_active_session()
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
-        cmd_runner=runner,
-    )
+    ctrl = TimerController(cmd_runner=runner)
     ctrl.handle_expired()
 
     # Re-check after transition (e.g. the session may have completed)
@@ -177,7 +165,6 @@ def _status_line() -> str:
                 play_bell(BELL_30_FILE)
                 runner.run(
                     EVENT_BELL_30,
-                    task=state.task,
                     session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
@@ -189,7 +176,6 @@ def _status_line() -> str:
                 play_bell(BELL_BEGIN_FILE)
                 runner.run(
                     EVENT_BELL_BEGIN,
-                    task=state.task,
                     session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
@@ -209,7 +195,6 @@ def _status_line() -> str:
                 play_bell(BELL_END_FILE)
                 runner.run(
                     EVENT_BELL_END,
-                    task=state.task,
                     session=state.current - 1,  # 0-based: work session N
                     total=state.total,
                 )
@@ -239,93 +224,6 @@ def _status_line() -> str:
 
 
 # ── Handlers (called from main loop) ──────────────────────────────────────────
-
-
-def _handle_complete(tm: TaskManager) -> None:
-    """Complete pomodoro — pick a task and log it."""
-    tasks = tm.all_tasks()
-    if not tasks:
-        notify("Pomodoro", "No tasks available.")
-        return
-
-    choice = numbered_menu("Which pomodoro did you complete?", tasks)
-    if choice is None or choice == BACK_LABEL:
-        return
-    task = strip_number(choice)
-    tm.log(task)
-    notify("🍅 Pomodoro logged", task)
-
-
-def _handle_manage(tm: TaskManager) -> None:
-    """Manage tasks — two-section display with edit/delete/add."""
-    while True:
-        everyday = tm.everyday()
-        unique = tm.unique()
-
-        # Build menu with section headers
-        menu_lines: list[str] = []
-        items: list[
-            tuple[str, Path]
-        ] = []  # (task, file_path) parallel to numbered entries
-
-        idx = 0
-        if everyday:
-            menu_lines.append("── 📅 Everyday ──")
-            for task in everyday:
-                idx += 1
-                menu_lines.append(f"{idx}. {task}")
-                items.append((task, tm.everyday_path))
-        if unique:
-            menu_lines.append("── 📌 Unique ──")
-            for task in unique:
-                idx += 1
-                menu_lines.append(f"{idx}. {task}")
-                items.append((task, tm.unique_path))
-
-        menu_lines.append("➕  Add task")
-        menu_lines.append(BACK_LABEL)
-
-        action = rofi_menu("Tasks", menu_lines, no_custom=True)
-        if action is None or action == BACK_LABEL:
-            break
-
-        if action.startswith("➕"):
-            # Add task
-            cat_choice = rofi_menu(
-                "Add to...", ["📅 Everyday", "📌 Unique", "↩ Cancel"], no_custom=True
-            )
-            if cat_choice is None or cat_choice == "↩ Cancel":
-                continue
-            category = "everyday" if "Everyday" in cat_choice else "unique"
-
-            new_task = rofi_menu("New task name", [], no_custom=False)
-            if new_task:
-                tm.add(new_task, category)
-            continue
-
-        # Parse numbered selection
-        m = re.match(r"^(\d+)\.", action)
-        if not m:
-            continue  # section header clicked
-        num = int(m.group(1))
-        if num < 1 or num > len(items):
-            continue
-
-        task, file_path = items[num - 1]
-
-        # Edit / Delete / Cancel
-        choice = rofi_menu(
-            action, ["✏️  Edit", "🗑  Delete", "↩  Cancel"], no_custom=True
-        )
-        if choice is None or choice.startswith("↩"):
-            continue
-
-        if choice.startswith("✏️"):
-            edited = rofi_menu("Edit task", [task], no_custom=False)
-            if edited and edited != task:
-                tm.edit(task, edited, file_path)
-        elif choice.startswith("🗑"):
-            tm.delete(task, file_path)
 
 
 def _lookup_default_rhythm(
@@ -359,18 +257,13 @@ def _lookup_default_rhythm(
     return None
 
 
-def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
+def _handle_new_session(ctrl: TimerController) -> bool:
     """New session flow: step-based loop with Back navigation.
 
     Returns True if a session was started, False if the user cancelled.
     """
-    tasks = tm.all_tasks()
-    if not tasks:
-        notify("Pomodoro", "No tasks available. Add tasks first.")
-        return False
-
-    step = 1  # 1=task, 2=video, 3=audio, 4=duration, 5=count
-    task = video = ""
+    step = 1  # 1=video, 2=mode, 3=duration, 4=count
+    video = ""
     video_name = ""
     work_min = break_min = total = 0
     warm_up_secs = 0
@@ -380,15 +273,6 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
 
     while True:
         if step == 1:
-            choice = numbered_menu("Pick task", tasks)
-            if choice is None:
-                return False  # ESC → exit
-            if choice == BACK_LABEL:
-                return False  # back to main menu
-            task = strip_number(choice)
-            step = 2
-
-        elif step == 2:
             arc_thumb = _ensure_arc_thumb()
             past_arc_thumb = _ensure_past_arc_thumb()
             cliamp_thumb = _ensure_cliamp_thumb()
@@ -401,15 +285,13 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
-                step = 1
-                continue
+                return False
 
             if choice == "CURRENT_ARC":
-                # ARC mode — audio-only, no video file
                 arc_mode = True
                 video = str(ARC_SOUNDTRACK)
                 video_name = "CURRENT_ARC"
-                step = 4  # skip mode selection, go straight to duration
+                step = 3  # skip mode selection, go straight to duration
                 continue
 
             if choice == "PAST_ARC":
@@ -417,7 +299,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 arc_mode = True
                 video = str(PAST_ARC_FILE)
                 video_name = "PAST_ARC"
-                step = 4  # skip mode selection, go straight to duration
+                step = 3  # skip mode selection, go straight to duration
                 continue
 
             if choice == "CLIAMP":
@@ -425,15 +307,15 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 cliamp_mode = True
                 video = "CLIAMP"
                 video_name = "CLIAMP"
-                step = 4  # skip mode selection, go straight to duration
+                step = 3  # skip mode selection, go straight to duration
                 continue
 
             video_name = choice
             video = str(POMO_DIR / video_name)
             arc_mode = False
-            step = 3
+            step = 2
 
-        elif step == 3:
+        elif step == 2:
             mode_choice = rofi_menu(
                 "Mode",
                 ["🖥  Play video (fullscreen)", "🎵  Audio only", BACK_LABEL],
@@ -442,7 +324,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             if mode_choice is None:
                 return False  # ESC → exit
             if mode_choice == BACK_LABEL:
-                step = 2
+                step = 1
                 continue
             audio_only = "Audio only" in mode_choice
             if audio_only:
@@ -460,11 +342,10 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 if rhythm_choice is None:
                     return False  # ESC → exit
                 if rhythm_choice == BACK_LABEL:
-                    step = 2  # back to video selection
+                    step = 1  # back to video selection
                     continue
                 if "Default" in rhythm_choice:
                     ctrl.start(
-                        task,
                         video,
                         work_min,
                         break_min,
@@ -483,9 +364,9 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                 warm_up_secs = 0
 
             # For personalized rhythm or non-default videos, show duration picker
-            step = 4
+            step = 3
 
-        elif step == 4:
+        elif step == 3:
             labels = [label for label, _, _ in DURATION_PRESETS] + [
                 CUSTOM_LABEL,
                 BACK_LABEL,
@@ -494,7 +375,7 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
-                step = 3
+                step = 2
                 continue
 
             found = False
@@ -531,21 +412,20 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                     continue  # back to duration picker
 
             if found:
-                step = 5
+                step = 4
 
-        elif step == 5:
+        elif step == 4:
             count_labels = [label for label, _ in COUNT_OPTIONS] + [BACK_LABEL]
             choice = rofi_menu("How many?", count_labels)
             if choice is None:
                 return False  # ESC → exit
             if choice == BACK_LABEL:
-                step = 4
+                step = 3
                 continue
             for label, c in COUNT_OPTIONS:
                 if choice == label:
                     total = c
                     ctrl.start(
-                        task,
                         video,
                         work_min,
                         break_min,
@@ -556,113 +436,6 @@ def _handle_new_session(tm: TaskManager, ctrl: TimerController) -> bool:
                         cliamp_mode=cliamp_mode,
                     )
                     return True
-
-
-def _handle_status(ctrl: TimerController) -> None:
-    """Show current session status with pause/resume/stop actions."""
-    state = PomodoroState.load(STATE_FILE)
-    if not state.is_active:
-        return
-
-    paused = PAUSE_FILE.exists()
-
-    work_total = state.work_min * 60
-
-    if paused:
-        raw = int(PAUSE_FILE.read_text().strip())
-    else:
-        raw = state.remaining_seconds
-
-    in_warmup = state.phase == "work" and raw > work_total
-    display_secs = (raw - work_total) if in_warmup else raw
-
-    mins = display_secs // 60
-    secs_rem = display_secs % 60
-    end_fmt = (
-        time.strftime("%H:%M", time.localtime(state.end_ts))
-        if state.end_ts
-        else "--:--"
-    )
-
-    if state.phase == "break":
-        break_icon = "🏹" if state.arc_mode else "☕"
-        info = f"{break_icon}  {state.task}   •   {mins}m {secs_rem}s break   •   session {state.current}/{state.total} next"
-    elif state.phase == "reflect":
-        info = f"🤔  {state.task}   •   {mins}m {secs_rem}s reflection   •   all sessions complete"
-    elif in_warmup:
-        info = f"🔥  {state.task}   •   {mins}m {secs_rem}s warm-up   •   {state.current}/{state.total}"
-    else:
-        info = f"▶  {state.task}   •   {mins}m {secs_rem}s left   •   ends {end_fmt}   •   {state.current}/{state.total}"
-
-    toggle_label = "▶  Resume" if paused else "⏸  Pause"
-
-    action = rofi_menu(
-        "Pomodoro",
-        [
-            info,
-            toggle_label,
-            "🔄  Change task",
-            "⏹  Stop all",
-            "🔄  Reset everything",
-        ],
-        no_custom=True,
-    )
-
-    if action is None:
-        return
-
-    if "Resume" in action:
-        ctrl.resume()
-    elif "Pause" in action:
-        ctrl.pause()
-    elif "Change task" in action:
-        _handle_change_task(ctrl)
-    elif action.startswith("⏹"):
-        ctrl.clear_state()
-    elif "Reset" in action:
-        ctrl.clear_state()
-        notify("🍅 Pomodoro", "All state cleared.")
-
-
-def _handle_change_task(ctrl: TimerController) -> None:
-    """Change the task for the current session."""
-    state = PomodoroState.load(STATE_FILE)
-    if not state.is_active:
-        return
-
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tasks = tm.all_tasks()
-    choice = numbered_menu("Change task", tasks)
-    if choice is None or choice == BACK_LABEL:
-        return
-    new_task = strip_number(choice)
-    if new_task:
-        state.task = new_task
-        state.save(STATE_FILE)
-        notify("🍅 Task changed", new_task)
-
-
-def _handle_heatmap() -> None:
-    """Launch the Textual interactive heatmap in a new terminal."""
-    import subprocess
-    import sys
-    from pathlib import Path
-
-    # Find project root (same logic as pomodoro script)
-    root = Path(__file__).resolve().parent.parent
-    if not (root / "pomodoro_lib").is_dir():
-        root = Path.home() / "project" / "pomodoro_rofi"
-
-    subprocess.Popen(
-        [
-            "alacritty",
-            "-e",
-            sys.executable,
-            "-m",
-            "pomodoro_lib.heatmap_app",
-        ],
-        cwd=str(root),
-    )
 
 
 # ── CLI start subcommand ────────────────────────────────────────────────────
@@ -1581,12 +1354,6 @@ def _handle_start(args: list[str]) -> None:
         description="Start a pomodoro session from the command line.",
     )
     parser.add_argument(
-        "--task",
-        "-t",
-        required=True,
-        help="Task name (e.g. 'read', 'write')",
-    )
-    parser.add_argument(
         "--video",
         "-v",
         required=True,
@@ -1603,7 +1370,7 @@ def _handle_start(args: list[str]) -> None:
         "-c",
         type=int,
         default=None,
-        help="Number of pomodoros (default: from rhythm preset or 1)",
+        help="Number of pomodoros (default: from rhythm preset or 2)",
     )
     parser.add_argument(
         "--warmup",
@@ -1621,7 +1388,6 @@ def _handle_start(args: list[str]) -> None:
 
     parsed = parser.parse_args(args)
 
-    task = parsed.task
     arc_mode = parsed.video.lower() in ("arc", "current_arc")
     past_arc_mode = parsed.video.lower() == "past_arc"
     cliamp_mode = parsed.video.lower() in ("cliamp", "lofi", "cliamp_lofi")
@@ -1667,9 +1433,9 @@ def _handle_start(args: list[str]) -> None:
         _ensure_mp3(video_path)
 
     # ── Determine work/break/count/warmup ─────────────────────────────────
-    work_min = 25
-    break_min = 5
-    total = 1
+    work_min = 50
+    break_min = 10
+    total = 2
     warm_up_secs = 0
     schedule = None
 
@@ -1691,17 +1457,15 @@ def _handle_start(args: list[str]) -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-        total = parsed.count or 1
+        total = parsed.count or 2
         if parsed.warmup is not None:
             warm_up_secs = parsed.warmup
     else:
         if rhythm_data is not None:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
         else:
-            # No preset found — fallback to 25-5 × 4 for random/arc/cliamp,
-            # 25-5 × 1 for explicit
             if random_picked or arc_mode or cliamp_mode:
-                work_min, break_min, total, warm_up_secs = 25, 5, 4, 0
+                work_min, break_min, total, warm_up_secs = 50, 10, 2, 0
         if parsed.count is not None:
             total = parsed.count
         if parsed.warmup is not None:
@@ -1709,24 +1473,16 @@ def _handle_start(args: list[str]) -> None:
 
     # ── Check for existing active session ─────────────────────────────────
     if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
         print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
+            "Error: A session is already active. Stop it first.",
             file=sys.stderr,
         )
         sys.exit(1)
 
     # ── Start the session ─────────────────────────────────────────────────
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m \u00d7 {c}")
-    )
+    ctrl = TimerController()
 
     ctrl.start(
-        task,
         str(video_path),
         work_min,
         break_min,
@@ -1740,7 +1496,7 @@ def _handle_start(args: list[str]) -> None:
 
     rhythm_label = f"{work_min}/{break_min}"
     print(
-        f"\U0001f345 Started: {task} | {video_name} | {rhythm_label} | "
+        f"\U0001f345 Started: {video_name} | {rhythm_label} | "
         f"{total} pomodoro(s)"
         + (f" | {warm_up_secs}s warm-up" if warm_up_secs else "")
         + (" \U0001f3b2" if random_picked else "")
@@ -1816,7 +1572,7 @@ def _parse_from_option(extra: list[str]) -> int:
 
 
 def _start_preset_session(
-    preset_name: str, tm: TaskManager, from_schedule: int = 1
+    preset_name: str, from_schedule: int = 1
 ) -> TimerController:
     """Start a startup preset session, optionally at a later schedule entry.
 
@@ -1842,10 +1598,7 @@ def _start_preset_session(
         log_path=CMD_LOG_FILE,
     )
 
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
-        cmd_runner=preset_runner,
-    )
+    ctrl = TimerController(cmd_runner=preset_runner)
 
     first_work, first_break = preset.schedule[from_schedule - 1]
 
@@ -1877,7 +1630,6 @@ def _start_preset_session(
         warm_up_secs = 0
 
     ctrl.start(
-        task="startup",
         video=preset.start_dir,
         work_min=first_work,
         break_min=first_break,
@@ -1916,16 +1668,14 @@ def _start_preset_session(
     return ctrl
 
 
-def _start_video_session(
-    task: str, video_name: str, tm: TaskManager
-) -> TimerController:
+def _start_video_session(video_name: str) -> TimerController:
     """Start a session for a single video using its default rhythm.
 
-    Falls back to 25-5 × 1 when the video has no POMODORO_DEFAULTS entry.
+    Falls back to 50-10 × 2 when the video has no POMODORO_DEFAULTS entry.
     """
     rhythm_data = _lookup_default_rhythm(video_name)
     if rhythm_data is None:
-        work_min, break_min, total, warm_up_secs, schedule = 25, 5, 1, 0, None
+        work_min, break_min, total, warm_up_secs, schedule = 50, 10, 2, 0, None
     else:
         work_min, break_min, total, warm_up_secs, schedule = rhythm_data
 
@@ -1933,13 +1683,9 @@ def _start_video_session(
     if video_path is None:
         raise FileNotFoundError(f"Video '{video_name}' not found in {POMO_DIR}")
 
-    ctrl = TimerController(
-        on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
-        cmd_runner=_cmd_runner,
-    )
+    ctrl = TimerController(cmd_runner=_cmd_runner)
 
     ctrl.start(
-        task=task,
         video=str(video_path),
         work_min=work_min,
         break_min=break_min,
@@ -1948,18 +1694,12 @@ def _start_video_session(
         schedule=schedule or None,
     )
 
-    print(f"\U0001f345 {task}: {video_name} — {work_min}/{break_min} × {total}")
+    print(f"\U0001f345 {video_name}: {work_min}/{break_min} × {total}")
     return ctrl
 
 
-def _resolve_chain_step(step) -> tuple[str | None, str, str | None]:
-    """Resolve one Chain step into (task, item) plus a day-cycle note.
-
-    A step may be a string (video/preset name), a ``(task, item)`` tuple, or
-    a list of steps whose element is chosen by day of month: ``day % n`` picks
-    the index (a day that is a multiple of ``n`` → first element, +1 → second,
-    …). Lists may appear inside tuples too, e.g. ``("deep work", [a, b])``.
-    """
+def _resolve_chain_step(step) -> tuple[str, str | None]:
+    """Resolve a video or preset, including day-cycled lists."""
     day = datetime.now().day
 
     if isinstance(step, list):
@@ -1967,21 +1707,10 @@ def _resolve_chain_step(step) -> tuple[str | None, str, str | None]:
         if n == 0:
             raise ValueError(f"empty day-cycle list: {step!r}")
         picked = step[day % n]
-        task, item, _ = _resolve_chain_step(picked)
-        return task, item, f"day {day} % {n} = {day % n} → {item}"
+        item, _ = _resolve_chain_step(picked)
+        return item, f"day {day} % {n} = {day % n} → {item}"
 
-    if isinstance(step, tuple):
-        task, item = step
-        if isinstance(item, list):
-            n = len(item)
-            if n == 0:
-                raise ValueError(f"empty day-cycle list: {step!r}")
-            picked = item[day % n]
-            inner_task, inner_item, note = _resolve_chain_step(picked)
-            return inner_task or task, inner_item, note
-        return task, item, None
-
-    return None, step, None
+    return step, None
 
 
 def _handle_chain(name: str) -> None:
@@ -1989,16 +1718,11 @@ def _handle_chain(name: str) -> None:
     chain = CHAINS[name]
 
     if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
         print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
+            "Error: A session is already active. Stop it first.",
             file=sys.stderr,
         )
         sys.exit(1)
-
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
 
     print(f"⛓  Chain: {name}")
     if chain.description:
@@ -2006,7 +1730,7 @@ def _handle_chain(name: str) -> None:
 
     for i, step in enumerate(chain.steps, 1):
         try:
-            task, item, day_note = _resolve_chain_step(step)
+            item, day_note = _resolve_chain_step(step)
         except ValueError as exc:
             raise ValueError(f"Chain '{name}' step {i}: {exc}") from exc
         if day_note:
@@ -2014,12 +1738,11 @@ def _handle_chain(name: str) -> None:
 
         if item in STARTUP_PRESETS:
             print(f"\n⛓  [{i}/{len(chain.steps)}] Preset: {item}")
-            ctrl = _start_preset_session(item, tm)
+            ctrl = _start_preset_session(item)
         else:
             video_name = str(item)
-            task_name = task or Path(video_name).stem
             print(f"\n⛓  [{i}/{len(chain.steps)}] Video: {video_name}")
-            ctrl = _start_video_session(task_name, video_name, tm)
+            ctrl = _start_video_session(video_name)
 
         interrupted = _run_session_loop(ctrl)
         if interrupted:
@@ -2036,18 +1759,13 @@ def _handle_startup_preset(name: str, from_schedule: int = 1) -> None:
     earlier ones.
     """
     if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
         print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
+            "Error: A session is already active. Stop it first.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
-    ctrl = _start_preset_session(name, tm, from_schedule)
+    ctrl = _start_preset_session(name, from_schedule)
     _run_session_loop(ctrl)
 
 
@@ -2082,10 +1800,8 @@ def _handle_random() -> None:
     # ── Main loop ──────────────────────────────────────────────────────────
 
     if STATE_FILE.exists():
-        state = PomodoroState.load(STATE_FILE)
         print(
-            f"Error: A session is already active ({state.task}). "
-            f"Stop it first with 'pomodoro stop'.",
+            "Error: A session is already active. Stop it first.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -2096,15 +1812,12 @@ def _handle_random() -> None:
         sys.exit(1)
 
     random.shuffle(videos)
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
     SKIP_RANDOM_FILE.unlink(missing_ok=True)  # clean from previous runs
 
     for v in videos:
         rhythm_data = _lookup_default_rhythm(v.name)
         if rhythm_data is None:
-            work_min, break_min, total, warm_up_secs, schedule = 25, 5, 1, 0, None
+            work_min, break_min, total, warm_up_secs, schedule = 50, 10, 2, 0, None
         else:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
 
@@ -2113,13 +1826,9 @@ def _handle_random() -> None:
             flush=True,
         )
 
-        ctrl = TimerController(
-            on_session_complete=lambda t, w, c: tm.log(t, f"{w}m × {c}"),
-            cmd_runner=_cmd_runner,
-        )
+        ctrl = TimerController(cmd_runner=_cmd_runner)
 
         ctrl.start(
-            task="random",
             video=str(v),
             work_min=work_min,
             break_min=break_min,
@@ -2153,29 +1862,9 @@ def _handle_random() -> None:
 
 
 def _handle_log() -> None:
-    """Print session history followed by today's command-execution logs."""
+    """Print today's command-execution logs."""
     today_str = time.strftime("%Y-%m-%d")
 
-    # ── Session history ────────────────────────────────────────────────────
-    if HISTORY_FILE.exists():
-        lines = [l.strip() for l in HISTORY_FILE.read_text().splitlines() if l.strip()]
-        if lines:
-            print(f"{'Date':12} {'Time':7}  Task / Info")
-            print("-" * 70)
-            for line in lines:
-                try:
-                    # [YYYY-MM-DD HH:MM] task — duration_info
-                    bracket, rest = line.split("] ", 1)
-                    date_time = bracket[1:]
-                    date_str, time_str = date_time.split(" ", 1)
-                    if not rest or rest.startswith("—"):
-                        rest = "(no task) " + rest
-                    print(f"{date_str:12} {time_str:7}  {rest}")
-                except (ValueError, IndexError):
-                    print(line)
-            print()
-
-    # ── Today's command-execution log ───────────────────────────────────────
     if CMD_LOG_FILE.exists():
         cmd_lines = [
             l.strip()
@@ -2188,8 +1877,8 @@ def _handle_log() -> None:
                 print(line)
             print()
 
-    if not HISTORY_FILE.exists() and not CMD_LOG_FILE.exists():
-        print("No history yet.")
+    else:
+        print("No command history yet.")
 
 
 def _handle_list() -> None:
@@ -2307,32 +1996,19 @@ def _run_subcommand(args: list[str]) -> None:
 
 def _run_ui() -> None:
     """Launch the rofi main menu and dispatch to handlers."""
-    tm = TaskManager(TASKS_FILE, TASKS_UNIQUE, HISTORY_FILE)
-    tm.init_defaults(DEFAULT_TASKS)
-
-    ctrl = TimerController(
-        on_session_complete=lambda task, w, t: tm.log(task, f"{w}m × {t}"),
-        cmd_runner=_cmd_runner,
-    )
+    ctrl = TimerController(cmd_runner=_cmd_runner)
 
     while True:
         has_session = STATE_FILE.exists()
 
         if has_session:
             options = [
-                "📊  Current status",
                 "▶  New session",
-                "✅  Complete pomodoro",
-                "📝  Manage tasks",
-                "🔥  Heat map",
                 "🔄  Reset everything",
             ]
         else:
             options = [
                 "▶  New session",
-                "✅  Complete pomodoro",
-                "📝  Manage tasks",
-                "🔥  Heat map",
                 "🔄  Reset everything",
             ]
 
@@ -2340,17 +2016,9 @@ def _run_ui() -> None:
         if action is None:
             sys.exit(0)
 
-        if action.startswith("📊"):
-            _handle_status(ctrl)
-        elif action.startswith("▶"):
-            if _handle_new_session(tm, ctrl):
+        if action.startswith("▶"):
+            if _handle_new_session(ctrl):
                 sys.exit(0)
-        elif action.startswith("✅"):
-            _handle_complete(tm)
-        elif action.startswith("📝"):
-            _handle_manage(tm)
-        elif action.startswith("🔥"):
-            _handle_heatmap()
         elif action.startswith("🔄"):
             ctrl.clear_state()
             notify("🍅 Pomodoro", "All state cleared.")
@@ -2362,7 +2030,7 @@ def _run_ui() -> None:
 def main() -> None:
     args = sys.argv[1:]
     if args:
-        # -log / --log  →  show session history
+        # -log / --log  →  show today's command log
         if args[0] in ("-log", "--log"):
             _handle_log()
         # -list / --list  →  show video presets

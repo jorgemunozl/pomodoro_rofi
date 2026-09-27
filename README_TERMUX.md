@@ -93,7 +93,7 @@ cd ~/pomodoro_rofi
 ./pomodoro status                 # current timer state ("" = idle)
 ./pomodoro stop | next | toggle   # control an active session
 ./pomodoro <preset>               # start a preset (live countdown, Ctrl+C stops)
-./pomodoro start -t <task> -v <dir-or-file> [-r 25-5] [-c N] [-a]
+./pomodoro start -v <dir-or-file> [-r 25-5] [-c N] [-a]
 ./pomodoro_phone                  # CLI menu (Termux style)
 ```
 

@@ -61,9 +61,9 @@ open_terminal_riced = (
 
 cleaning = "imv -f ~/Videos/clean.jpg"
 
-open_dawn = 'pomodoro --task "golden morning" --video dawn_2025_II.mp4'
-open_mine = 'pomodoro --task "golden afternoon" --video mine_2025_II.webm'
-open_shinjuku_2 = 'pomodoro --task "golden afternoon" --video shinjuku2.mp4'
+open_dawn = 'pomodoro --video "dawn_2025_II.mp4"'
+open_mine = 'pomodoro --video "mine_2025_II.webm"'
+open_shinjuku_2 = 'pomodoro --video "shinjuku2.mp4"'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
 shutdown_command = "python3 /home/jorge/dotfiles/alarm/alarm.py"
@@ -176,9 +176,6 @@ FINISH_PLAYED = TMP_DIR / "pomo_finish_played"
 TRANSITION_LOCK = TMP_DIR / "pomo_transition_lock"
 MPV_SOCKET = TMP_DIR / "mpvsocket"
 
-TASKS_FILE = DATA_DIR / "tasks"
-TASKS_UNIQUE = DATA_DIR / "tasks_unique"
-HISTORY_FILE = DATA_DIR / "history"
 CMD_LOG_FILE = DATA_DIR / "cmd_history"
 
 ROFI_THEME = Path.home() / ".config" / "rofi" / "pomodoro.rasi"
@@ -215,22 +212,19 @@ POMODORO_DEFAULTS = [
 # ── Duration presets ──────────────────────────────────────────────────────────
 # (label, work_min, break_min)
 DURATION_PRESETS = [
+    ("50 min focus  ·  10 min break", 50, 10),
     ("25 min focus  ·  5 min break", 25, 5),
     ("30 min focus  ·  6 min break", 30, 6),
     ("35 min focus  ·  7 min break", 35, 7),
     ("40 min focus  ·  8 min break", 40, 8),
     ("45 min focus  ·  9 min break", 45, 9),
-    ("50 min focus  ·  10 min break", 50, 10),
 ]
 CUSTOM_LABEL = "⚡ Custom time"
 
-# ── Default tasks ─────────────────────────────────────────────────────────────
-DEFAULT_TASKS = []
-
 # ── Pomodoro count options ────────────────────────────────────────────────────
 COUNT_OPTIONS = [
-    ("1 pomodoro", 1),
     ("2 pomodoros", 2),
+    ("1 pomodoro", 1),
     ("3 pomodoros", 3),
     ("4 pomodoros", 4),
     ("5 pomodoros", 5),

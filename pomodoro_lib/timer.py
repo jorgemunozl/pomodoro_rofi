@@ -449,13 +449,11 @@ class TimerController:
 
     def __init__(
         self,
-        on_session_complete: Callable[[str, int, int], None] | None = None,
         cmd_runner: CommandRunner | None = None,
     ):
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self.state = PomodoroState()
-        self._on_session_complete = on_session_complete
         self._cmd_runner = cmd_runner or CommandRunner()
 
     def _notify(
@@ -568,7 +566,6 @@ class TimerController:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def start(
         self,
-        task: str,
         video: str,
         work_min: int,
         break_min: int,
@@ -594,7 +591,6 @@ class TimerController:
         FINISH_PLAYED.unlink(missing_ok=True)
         total_first_secs = warm_up_secs + work_min * 60 + EXTRA_WORK_SECS
         self.state = PomodoroState(
-            task=task,
             end_ts=time.time() + total_first_secs,
             work_min=work_min,
             break_min=break_min,
@@ -623,7 +619,6 @@ class TimerController:
             start_mpv(video, audio_only, arc_mode, silence_secs)
         self._cmd_runner.run(
             "session_start",
-            task=task,
             work_min=work_min,
             break_min=break_min,
             total=total,
@@ -633,7 +628,6 @@ class TimerController:
         # First pomodoro begins
         self._cmd_runner.run(
             "pomodoro_begin",
-            task=task,
             work_min=work_min,
             break_min=break_min,
             total=total,
@@ -643,7 +637,7 @@ class TimerController:
         warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         self._notify(
             "🍅 Pomodoro started",
-            f"{task} — session {start_session}/{total}\n"
+            f"Session {start_session}/{total}\n"
             f"{warmup_note}{work_min}min focus — "
             f"{time.strftime('%H:%M', time.localtime(self.state.end_ts))}",
             phase="start",
@@ -907,8 +901,8 @@ class TimerController:
             WORK_BELL_PLAYED.unlink(missing_ok=True)
             self._notify(
                 "🍅 All sessions complete!",
-                f'"{self.state.task}" — {self.state.total} session(s) '
-                f"of {self.state.work_min}min complete.\n"
+                f"{self.state.total} session(s) of {self.state.work_min}min "
+                f"complete.\n"
                 f"🤔 Take a minute to reflect…",
                 phase="reflect",
                 session=self.state.current - 1,
@@ -921,7 +915,6 @@ class TimerController:
             # fire commands like `[open_chess, 3]` twice.
             self._cmd_runner.run(
                 "pomodoro_done",
-                task=self.state.task,
                 work_min=self.state.work_min,
                 break_min=self.state.break_min,
                 session=self.state.current,
@@ -949,7 +942,6 @@ class TimerController:
         # Fire event AFTER state is saved so commands see the updated phase
         self._cmd_runner.run(
             "pomodoro_done",
-            task=self.state.task,
             work_min=self.state.work_min,
             break_min=self.state.break_min,
             session=self.state.current - 1,
@@ -959,7 +951,7 @@ class TimerController:
 
         self._notify(
             "🍅 Session done!",
-            f'"{self.state.task}" — {self.state.work_min}min complete.\n'
+            f"{self.state.work_min}min complete.\n"
             f"☕ {self.state.break_min}min break — "
             f"session {next_sess}/{self.state.total} next.",
             phase="pomodoro_done",
@@ -1036,7 +1028,6 @@ class TimerController:
         # Fire event AFTER state is saved so commands see the updated phase
         self._cmd_runner.run(
             "break_done",
-            task=self.state.task,
             work_min=self.state.work_min,
             break_min=self.state.break_min,
             session=self.state.current - 2,
@@ -1047,7 +1038,6 @@ class TimerController:
         # This work phase begins (0-based: current-1)
         self._cmd_runner.run(
             "pomodoro_begin",
-            task=self.state.task,
             work_min=self.state.work_min,
             break_min=self.state.break_min,
             total=self.state.total,
@@ -1147,18 +1137,14 @@ class TimerController:
         play_finish_sound()
 
         # Capture context before clearing state
-        task = self.state.task
         work_min = self.state.work_min
         total = self.state.total
-
         self._notify(
             "🍅 Time's up!",
-            f'"{task}" — {total} session(s) complete!',
+            f"{total} session(s) complete!",
             phase="finished",
             session=total - 1,
         )
-        if self._on_session_complete:
-            self._on_session_complete(task, work_min, total)
 
         # Clear state BEFORE firing session_complete so commands that start a
         # new session (e.g. "pomodoro random") find a clean state.
@@ -1166,7 +1152,6 @@ class TimerController:
 
         self._cmd_runner.run(
             "session_complete",
-            task=task,
             work_min=work_min,
             total=total,
         )

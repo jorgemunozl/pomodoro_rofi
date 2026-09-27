@@ -1,9 +1,8 @@
 # 🍅 Pomodoro Rofi
 
 A **Pomodoro timer** with a [Rofi](https://github.com/davatorium/rofi) UI,
-[Polybar](https://github.com/polybar/polybar) integration,
-fullscreen ambient/study videos via [mpv](https://mpv.io/),
-and a GitHub-style contribution heatmap.
+[Polybar](https://github.com/polybar/polybar) integration, and fullscreen
+ambient/study videos via [mpv](https://mpv.io/).
 
 ---
 
@@ -11,12 +10,9 @@ and a GitHub-style contribution heatmap.
 
 | Feature | Description |
 |---|---|
-| **Rofi UI** | Intuitive dmenu-based interface for starting sessions, managing tasks, viewing heatmaps, and more. |
+| **Rofi UI** | dmenu-based interface for starting and controlling sessions. |
 | **Ambient videos** | Plays a looping, fullscreen mpv video during work sessions (supports `.mp4` and `.webm` with thumbnail previews). |
-| **Configurable rhythms** | Set custom work/break durations, pomodoro counts, and warm-up periods. Presets per video available. |
-| **Task management** | Maintain two lists: **everyday** tasks (persistent) and **unique** tasks (one-off). Edit, rename, or delete tasks from the UI. |
-| **History & logging** | Every completed session is logged with a timestamp, task name, duration, and session count. |
-| **Heatmap** | Two heatmap views — a quick Rofi-based one and a full interactive [Textual](https://textual.textualize.io/) TUI with clickable day cells. |
+| **Configurable rhythms** | Default sessions run 50/10 for two pomodoros; custom rhythms and per-video presets are also available. |
 | **Polybar integration** | Display the current timer status in your Polybar and control it with CLI subcommands (`status`, `toggle`, `stop`, `next`). |
 | **Pause / Resume** | Pause the current session and resume later. The video pauses along with the timer. |
 | **Notifications** | Uses `dunstify` for desktop notifications at session start, break start/end, and session completion. |
@@ -25,9 +21,9 @@ and a GitHub-style contribution heatmap.
 
 ## Screenshots
 
-| Main menu | Task picker | Duration picker |
-|---|---|---|
-| ![Main menu](images/1.png) | ![Task picker](images/tasks.png) | ![Duration picker](images/times.png) |
+| Main menu | Duration picker |
+|---|---|
+| ![Main menu](images/1.png) | ![Duration picker](images/times.png) |
 
  | Active session |
 |---|
@@ -51,7 +47,6 @@ and a GitHub-style contribution heatmap.
 - [dunstify](https://github.com/dunst-project/dunst) (part of `dunst`) — notifications
 - [i3](https://i3wm.org/) or compatible window manager (for workspace switching) — optional
 - [Polybar](https://github.com/polybar/polybar) — optional, for status line integration
-- [Textual](https://textual.textualize.io/) `pip install textual` — optional, for the interactive heatmap
 
 ### Install
 
@@ -100,10 +95,7 @@ pomodoro
 
 This opens the Rofi main menu with the following options:
 
-- **New session** — select a task, video, duration, and pomodoro count to start.
-- **Complete pomodoro** — log a completed session manually.
-- **Manage tasks** — view, add, edit, or delete everyday and unique tasks.
-- **Heat map** — launch the Rofi-based heatmap.
+- **New session** — select a video or audio source, then choose a rhythm and pomodoro count.
 - **Reset everything** — clear all active state.
 
 ### Polybar subcommands
@@ -142,9 +134,6 @@ pomodoro_rofi/
 │   ├── timer.py          # TimerController — background thread, mpv, notifications
 │   ├── rofi.py           # Rofi menu helpers (dmenu wrappers)
 │   ├── main.py           # CLI dispatch, main menu loop, UI flow
-│   ├── tasks.py          # TaskManager — everyday & unique task lists, history
-│   ├── heatmap.py        # History parsing, statistics, Rofi heatmap display
-│   └── heatmap_app.py    # Textual TUI interactive heatmap
 └── README.md
 ```
 
@@ -160,9 +149,7 @@ overridden by setting the `XDG_CONFIG_HOME` environment variable.
 | Path | Default | Purpose |
 |---|---|---|
 | Videos directory | `~/Videos/study` | Place `.mp4` / `.webm` files here. Thumbnails (same name, `.jpg`) shown in the video picker. |
-| Tasks (everyday) | `~/.config/pomodoro/tasks` | Persistent everyday tasks |
-| Tasks (unique) | `~/.config/pomodoro/tasks_unique` | One-off tasks |
-| History | `~/.config/pomodoro/history` | Session logs |
+| Command log | `data/cmd_history` | Lifecycle command execution log |
 | State | `/tmp/pomo_state.json` | Active session state |
 | Rofi theme | `~/.config/rofi/pomodoro.rasi` | Rofi styling |
 
@@ -186,14 +173,14 @@ it or pick a personalized rhythm.
 
 ### Duration presets
 
-Six presets are available (25/5, 30/6, 35/7, 40/8, 45/9, 50/10), plus a custom
+Six presets are available (50/10, 25/5, 30/6, 35/7, 40/8, 45/9), plus a custom
 option where you type `work-break` (e.g. `10-5`).
 
 ---
 
 ## How it works
 
-1. **Starting a session** — The UI walks you through task → video → duration → count.
+1. **Starting a session** — The UI walks you through video → mode → duration → count.
    A daemon timer thread is spawned that manages work/break cycles. mpv plays the
    selected video fullscreen on a dedicated i3 workspace (`🍅`).
 
@@ -205,10 +192,6 @@ option where you type `work-break` (e.g. `10-5`).
 3. **Pause / Resume** — Remaining seconds are written to `/tmp/pomo_pause`.
    mpv is paused via its IPC socket. Resuming reads the file and restarts
    the timer.
-
-4. **Heatmap** — The history file is parsed and aggregated into a GitHub-style
-   contribution grid. The Rofi version shows a static grid; the Textual TUI
-   version supports clicking individual day cells for a detailed breakdown.
 
 ---
 

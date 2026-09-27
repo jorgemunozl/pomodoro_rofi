@@ -3,7 +3,7 @@
 Usage
 -----
     runner = CommandRunner(EVENT_COMMANDS)
-    runner.run(EVENT_POMODORO_DONE, task="read", work_min=25, session=0, total=4)
+    runner.run(EVENT_POMODORO_DONE, work_min=25, session=0, total=4)
 
 Each event maps to a **list of entries**.  An entry is either:
 

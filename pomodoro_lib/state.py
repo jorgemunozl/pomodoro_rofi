@@ -8,7 +8,6 @@ from pathlib import Path
 
 @dataclass
 class PomodoroState:
-    task: str = ""
     end_ts: float = 0.0
     work_min: int = 25
     break_min: int = 5
