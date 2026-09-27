@@ -18,7 +18,9 @@ class PomodoroState:
     warm_up_secs: int = 0  # video intro seconds before actual focus begins
     audio_only: bool = False  # play mp3 instead of video
     arc_mode: bool = False  # playlist from ARC_SOUNDTRACK with silence gaps
-    cliamp_mode: bool = False  # audio via the CLIAMP daemon (lofi radio) instead of mpv
+    cliamp_mode: bool = (
+        False  # audio via the CLIAMP daemon (lofi radio) instead of mpv
+    )
     schedule: list = field(
         default_factory=list
     )  # [[work, break], ...] per pomodoro, empty if uniform
@@ -29,7 +31,9 @@ class PomodoroState:
         default_factory=list
     )  # [[at_pomodoro, dir_path], ...] — sequential ARC audio switches
     notify_color: str = "default"  # see NOTIFY_COLORS in constants.py
-    notify_title: str = ""  # template: "{summary}" substituted, empty = no change
+    notify_title: str = (
+        ""  # template: "{summary}" substituted, empty = no change
+    )
     notify_desc: str = ""  # template: "{body}" substituted, empty = no change
     notify_timeout: int = 0  # milliseconds (0 = dunst default)
     notify_phases: dict = field(
@@ -39,7 +43,9 @@ class PomodoroState:
         default_factory=dict
     )  # merged event commands for this session
     say_label: bool = False  # announce each phase's label via gtts
-    say_dir: str = ""  # cache dir for the preset's label mp3s (SOUNDS_DIR/<preset>)
+    say_dir: str = (
+        ""  # cache dir for the preset's label mp3s (SOUNDS_DIR/<preset>)
+    )
 
     @property
     def is_active(self) -> bool:

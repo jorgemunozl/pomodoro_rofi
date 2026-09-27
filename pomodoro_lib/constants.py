@@ -1,12 +1,13 @@
-"""Static constants: paths, commands, rhythms, and day-derived values.
-
-Kept separate from config.py, which defines session-level configuration
-(StartupPreset / Chain definitions and event commands).
-"""
-
+# flake8: noqa
 import tempfile
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+ScheduleEntry = (
+    tuple[list, tuple[str, str]]
+    | tuple[list, tuple[str, str], tuple[str, str] | None]
+)
 
 
 def _find_project_root() -> Path:
@@ -15,7 +16,6 @@ def _find_project_root() -> Path:
     return own.parent  # repo root
 
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = _find_project_root() / "data"
 POMO_DIR = Path.home() / "Videos" / "study"
 SOUNDS_DIR = POMO_DIR / "sound_effects"
@@ -33,28 +33,96 @@ ARC_CLEANING = Path.home() / "Videos" / "workout" / "rollouts" / "cleaning"
 ARC_SILENCE_SECONDS = 240  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
 
+
+@dataclass
+class StartupPreset:
+    """Preset schedule entries hold timing, phase labels, and optional event command."""
+
+    schedule: list[ScheduleEntry] = field(default_factory=list)
+    start_dir: str | None = None
+    description: str = ""
+    switches: list = field(default_factory=list, kw_only=True)
+    silence_secs: int = field(default=ARC_SILENCE_SECONDS, kw_only=True)
+    commands: dict[str, list] | None = field(default=None, kw_only=True)
+    notify_color: str = field(default="default", kw_only=True)
+    notify_title: str = field(default="", kw_only=True)
+    notify_desc: str = field(default="", kw_only=True)
+    notify_timeout: int = field(default=0, kw_only=True)
+    notify_phases: dict | None = field(default=None, kw_only=True)
+    say_label: bool = field(default=False, kw_only=True)
+
+    @property
+    def timing_schedule(self) -> list[list]:
+        return [entry[0] for entry in self.schedule]
+
+    @property
+    def phase_labels(self) -> list[str]:
+        return [label for entry in self.schedule for label in entry[1]]
+
+    @property
+    def schedule_commands(self) -> dict[str, list]:
+        """Return event commands filtered to their matching schedule entry."""
+        commands: dict[str, list] = {}
+        for index, entry in enumerate(self.schedule):
+            if len(entry) < 3 or entry[2] is None:
+                continue
+            command, event = entry[2]
+            event_index = index
+            if event == "pomodoro_done" and index == len(self.schedule) - 1:
+                event_index += 1  # the final pomodoro_done event is 1-based
+            commands.setdefault(event, []).append([command, event_index])
+        return commands
+
+
 ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
-EXTRA_WORK_SECS = 2.5  # extra seconds added to every work phase (25:00 → 25:03)
+EXTRA_WORK_SECS = (
+    2.5  # extra seconds added to every work phase (25:00 → 25:03)
+)
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
-# ── Commands ──────────────────────────────────────────────────────────────────
+# ── Commands ────────────────────────────────────────────────────────────────
 tabbed = 'alacritty -e "i3-msg layout tabbed"'
 
-journal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fdays-of-the-week"'
+journal = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    '/usr/bin/obsidian "obsidian://open?vault=personal&'
+    'file=project-notes%2Fdays-of-the-week"'
+)
 
-open_zk = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
-open_personal = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=personal"'
-open_social = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && exec /usr/bin/obsidian "obsidian://open?vault=social"'
-open_network = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && exec /usr/bin/obsidian "obsidian://open?vault=networking"'
+open_zk = (
+    'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && '
+    'exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
+)
+open_personal = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    'exec /usr/bin/obsidian "obsidian://open?vault=personal"'
+)
+open_social = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    'exec /usr/bin/obsidian "obsidian://open?vault=social"'
+)
+open_network = (
+    'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && '
+    'exec /usr/bin/obsidian "obsidian://open?vault=networking"'
+)
 
-open_chess = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://www.chess.com/home"'
-open_git = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && firefox --no-remote "https://github.com/jorgemunozl"'
+open_chess = (
+    'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && '
+    'firefox --no-remote "https://www.chess.com/home"'
+)
+open_git = (
+    'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && '
+    'firefox --no-remote "https://github.com/jorgemunozl"'
+)
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
-open_uta = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && mpv --fullscreen /home/jorge/Videos/kamado.webm'
+open_uta = (
+    'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && '
+    'mpv --fullscreen /home/jorge/Videos/kamado.webm'
+)
 open_terminal_riced = (
     'alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
 )
@@ -66,21 +134,54 @@ open_mine = 'pomodoro --video "mine_2025_II.webm"'
 open_shinjuku_2 = 'pomodoro --video "shinjuku2.mp4"'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
+monday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Mondays are about assist to classes and talk with Jeff"'
+
+thursday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays is for advance the MACE paper and classical mechanics duty"'
+
+wednesday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Wednesdays is about assist to classes and advance MACE paper"'
+
+tuesday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays are about advance MACE paper at the morning and mathematical methods exam"'
+
+friday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"'
+
+saturday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker saturdays i go to the library to advance the paper and prepare ourselves for the sunday at night"'
+
+sunday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
+
+current_day = datetime.now().astimezone().day
+
+def return_day_of_week() -> str:
+    """Return the current day of the week as a string."""
+    return datetime.now().astimezone().strftime("%A").lower()
+
+open_journal_work = str(eval(return_day_of_week()))
+
 shutdown_command = "python3 /home/jorge/dotfiles/alarm/alarm.py"
 
-calendly = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=canvas%2Fdays-of-the-week-researchy"'
-open_gmail = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/0/#inbox"'
-open_gmail_uni = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://mail.google.com/mail/u/1/#inbox"'
-open_huggingface = 'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  firefox --no-remote "https://huggingface.co/blog"'
+calendly = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    '/usr/bin/obsidian "obsidian://open?vault=personal&'
+    'file=canvas%2Fdays-of-the-week-researchy"'
+)
+open_gmail = (
+    'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  '
+    'firefox --no-remote "https://mail.google.com/mail/u/0/#inbox"'
+)
+open_gmail_uni = (
+    'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  '
+    'firefox --no-remote "https://mail.google.com/mail/u/1/#inbox"'
+)
+open_huggingface = (
+    'i3-msg "workspace --no-auto-back-and-forth 3:🌐" &&  '
+    'firefox --no-remote "https://huggingface.co/blog"'
+)
 slack = "slack"
 nchat = "alacritty -e nchat"
-nets = f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & {open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}"
+nets = (
+    f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & "
+    f"{open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}"
+)
 
-# ── CLIAMP (lofi radio daemon) ─────────────────────────────────────────────────
-# cliamp is a terminal music player; the pomodoro drives it via its IPC CLI.
-# The lofi station is loaded explicitly through a tiny playlist (see
-# _ensure_cliamp_playlist in timer.py) instead of relying on cliamp's
-# resume.json, which can point at any previously-played station.
 CLIAMP_LOFI_URL = "http://radio.cliamp.stream/lofi/stream"
 CLIAMP_PLAYLIST = "lofi"
 
@@ -89,35 +190,8 @@ cliamp_pause = "cliamp pause"
 cliamp_play = "cliamp play"
 cliamp_stop = "cliamp stop"
 
-# ── Day-derived values ────────────────────────────────────────────────────────
-current_day = datetime.now().day
-
-even_day = current_day % 2 == 0
-
-# Rotating morning pomodoro by day of month (currently unused by the app).
-if current_day % 3 == 0:
-    choseed = open_dawn
-elif current_day % 3 == 1:
-    choseed = 2
-else:
-    choseed = 2  # golden morning
-
-morning_pomodoro = choseed
-
-even_day_zk = even_day * open_zk + (not even_day) * calendly
-even_day_social = even_day * open_social + (not even_day) * open_network
-even_day_label = even_day * "polymath" + (not even_day) * "applications"
-
-odd_day_zk = (not even_day) * open_zk + even_day * calendly
-odd_day_social = (not even_day) * open_social + even_day * open_network
-odd_day_label = (not even_day) * "polymath" + even_day * "applications"
-
-even_day_social_label = even_day * "social" + (not even_day) * "networking"
 
 
-# ── Command registry (for `pomodoro --command <name>`) ────────────────────────
-# Every shell command defined above, plus the day-derived shortcuts. Kept after
-# the definitions so all names exist when this dict is built.
 COMMANDS: dict[str, str] = {
     name: globals()[name]
     for name in (
@@ -149,18 +223,10 @@ COMMANDS: dict[str, str] = {
         "cliamp_pause",
         "cliamp_play",
         "cliamp_stop",
-        # Day-derived shortcuts (resolve to a concrete command at import time)
-        "even_day_zk",
-        "even_day_social",
-        "odd_day_zk",
-        "odd_day_social",
     )
 }
 
 
-# ── Runtime state files ────────────────────────────────────────────────────
-# Termux has no /tmp — tempfile.gettempdir() resolves $TMPDIR there
-# and /tmp on regular Linux desktops.
 TMP_DIR = Path(tempfile.gettempdir())
 
 STATE_FILE = TMP_DIR / "pomo_state.json"
@@ -209,7 +275,7 @@ POMODORO_DEFAULTS = [
 ]
 
 
-# ── Duration presets ──────────────────────────────────────────────────────────
+# ── Duration presets ────────────────────────────────────────────────────────
 # (label, work_min, break_min)
 DURATION_PRESETS = [
     ("50 min focus  ·  10 min break", 50, 10),
@@ -221,7 +287,7 @@ DURATION_PRESETS = [
 ]
 CUSTOM_LABEL = "⚡ Custom time"
 
-# ── Pomodoro count options ────────────────────────────────────────────────────
+# ── Pomodoro count options ──────────────────────────────────────────────────
 COUNT_OPTIONS = [
     ("2 pomodoros", 2),
     ("1 pomodoro", 1),
@@ -234,7 +300,7 @@ COUNT_OPTIONS = [
 BACK_LABEL = "↩ Back"
 
 
-# ── Notification colors ────────────────────────────────────────────────────────
+# ── Notification colors ────────────────────────────────────────────────────
 # Map color names to dunst urgency levels. Configure your dunstrc per urgency.
 
 NOTIFY_COLORS: dict[str, str] = {
@@ -245,3 +311,138 @@ NOTIFY_COLORS: dict[str, str] = {
     "green": "normal",
     "purple": "normal",
 }
+
+STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = {
+    "afternoon_bus_spring_thinker": StartupPreset(
+        [
+            ([9 , 4], ("leaving uni" , "bus task"            )),
+            ([5 , 1], ("chess"       , "phase"               )),
+            ([20, 3], ("read"        , "phase"               )),
+            ([12, 4], ("walk to home", "home arrive protocol")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "bus and walking, afternoon, 5:20 from 5:50",
+    ),
+    "morning_bus_spring_thinker": StartupPreset(
+        [
+            ([16, 3], ("read"       ,"phase"               )),
+            ([6 , 1], ("arrive uni" ,"phase"               )),
+            ([20, 1], ("laptop mace","phase"               )),
+            ([11, 1], ("claude"     ,"home arrive protocol")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "bus and walking, morning, 5:20 from 6.30",
+    ),
+    "night_jeff_spring_thinker": StartupPreset(
+        [
+            ([11,10],("greet"  ,"science" )),
+            ([8 , 5],("special","break"   )),
+            ([22, 2],("chess"  ,"goodbye" )),
+        ],
+        str(None),
+        "Monday and thursday call to Jeff"
+    ),
+    "night_fastritual_spring_thinker": StartupPreset(
+        [
+            ([8, 0], ("core tasks"    ,""           ), ("cliamp_play"  ,"pomodoro_done")),
+            ([8, 0], ("applications"  ,""           ), ("cliamp_play"  ,"pomodoro_done")),
+            ([1, 0], ("log metrics"   ,""           ), (metrics,"pomodoro_done")),
+            ([7, 6], ("journal/work"  ,"journal/day"), (open_journal_work ,"pomodoro_done")),
+            ([6, 4], ("reflect a note","tidy"       ), (turn,"pomodoro_done")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "40 min, fast version of night ritual",
+    ),
+    "night_ritual_spring_thinker": StartupPreset(
+        [
+            ([15,1], ("applications"  ,"phase"      )),
+            ([8, 6], ("core task time","tidy"       )),
+            ([8, 1], ("review arc"    ,"phase"      )),
+            ([8, 1], ("budget"        ,"phase"      )),
+            ([2, 6], ("log metrics"   ,"break 6 min")),
+            ([8 ,7], ("journal/work"  ,"journal/day")),
+            ([7, 3], ("reflect a note","tidy"       )),
+            ([4, 1], ("going to sleep","turn off"   )),
+        ], # 87
+        str(ARC_SOUNDTRACK),
+        "spring night begin at eight"
+    ),
+    "noon_ritual_spring_thinker": StartupPreset(
+        [
+            ([11, 2], ("spaced repetition session one"  ,"spaced repetition break")),
+            ([11, 2], ("spaced repetition session two"  ,"spaced repetition break")),
+            ([11, 2], ("spaced repetition session three","spaced repetition break")),
+            ([6,  2], ("predict the future work"        ,"personal prepared"      )),
+            ([8,  0], ("personal read"                  ,""                       )),
+        ],
+        str(ARC_SOUNDTRACKS_PAST),
+        "after nap, pray already did it,1:05 to 2",
+    ),
+    "morning_ritual_spring_thinker": StartupPreset(
+        [
+            ([4 , 1], ("clean myself","set up"   )),
+            ([15, 5], ("first"       ,"break"    )),
+            ([16, 1], ("second"      ,"break"    )),
+            ([16, 1], ("third"       ,"it's over")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "one hour morning, at cec, from seven to eigth",
+    ),
+    "morning_wakeup_winter_researchy": StartupPreset(
+        [
+            ([4 , 3], ("pray", "prepare myself for the morning")),
+            ([21, 5], ("polymath first session", "nets break")),
+            ([21, 5], ("polymath second session, morning warm up", "schedule the morning")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "morning winter ritual",
+    ),
+    "afternoon_problem_solving": StartupPreset(
+        [
+            ([29, 1], ("problem solving", "review")),
+            ([29, 1], ("problem solving", "review")),
+        ],
+        str(ARC_SOUNDTRACKS_PAST),
+        (
+            "afternoon of problem solving from four to six, once each two "
+            "days I think that is proper"
+        ),
+    ),
+    "cleaning": StartupPreset(
+        [([25, 0], ("cleaning, washing", ""))],
+        str(ARC_CLEANING),
+        "cleaning",
+    ),
+}
+
+
+def preset_duration_minutes(preset: StartupPreset) -> int | float:
+    """Return the total work and break time for a startup preset."""
+    return sum(sum(entry[0]) for entry in preset.schedule)
+
+
+def print_preset_times() -> None:
+    """Print the total work and break minutes for each startup preset."""
+    for name, preset in STARTUP_PRESETS_REGISTRY.items():
+        print(f"{name}: {preset_duration_minutes(preset):g} minutes")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--preset_time",
+        "--preset-time",
+        action="store_true",
+        help="print total work and break time for every startup preset",
+    )
+    args = parser.parse_args()
+    if args.preset_time:
+        print_preset_times()
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

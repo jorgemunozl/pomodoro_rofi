@@ -88,7 +88,9 @@ def _patched_kill_audio() -> None:
 import pomodoro_lib.timer as _timer
 
 _timer.notify = _patched_notify
-_timer.start_mpv = lambda *a, **kw: _patched_play_audio(str(a[0])) if a else None
+_timer.start_mpv = lambda *a, **kw: (
+    _patched_play_audio(str(a[0])) if a else None
+)
 _timer.kill_mpv = _patched_kill_audio
 _timer.play_bell = lambda path: _patched_play_audio(str(path))
 _timer.play_finish_sound = lambda: _patched_play_audio(
@@ -218,8 +220,10 @@ def _handle_startup_preset(name: str) -> None:
 
     from pomodoro_lib.main import _ensure_mp3  # reuse desktop mp3 generator
 
-    first_work, first_break = preset.schedule[0]
-    total = len(preset.schedule)
+    schedule = preset.timing_schedule
+    phase_labels = preset.phase_labels
+    first_work, first_break = schedule[0]
+    total = len(schedule)
 
     # Determine mode
     start_path = Path(preset.start_dir) if preset.start_dir else None
@@ -242,7 +246,9 @@ def _handle_startup_preset(name: str) -> None:
         warm_up = 0
 
     preset_runner = CommandRunner.merge(
-        EVENT_COMMANDS, getattr(preset, "commands", None)
+        EVENT_COMMANDS,
+        getattr(preset, "commands", None),
+        preset.schedule_commands,
     )
     ctrl = TimerController(cmd_runner=preset_runner)
 
@@ -252,8 +258,8 @@ def _handle_startup_preset(name: str) -> None:
         break_min=first_break,
         total=total,
         warm_up_secs=warm_up,
-        schedule=preset.schedule,
-        schedule_labels=preset.labels,
+        schedule=schedule,
+        schedule_labels=phase_labels,
         audio_only=audio_only,
         arc_mode=arc_mode,
         silence_secs=silence,

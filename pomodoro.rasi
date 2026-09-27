@@ -6,17 +6,13 @@
  * "The kitchen timer" — rounded, tactile, one session at a time.
  */
 
-configuration {
-    fake-transparency: true;
-}
-
 * {
     font:           "JetBrains Mono 11";
 
     /* surface layers — darkest → lightest */
-    bg0:            #1a1817;
-    bg1:            #231f1e;
-    bg2:            #2e2826;
+    bg0:            rgba(26, 24, 23, 0.70);
+    bg1:            rgba(35, 31, 30, 0.70);
+    bg2:            rgba(46, 40, 38, 0.72);
     border-c:       #3d3633;
 
     /* text hierarchy — dim → hi */
@@ -41,6 +37,7 @@ configuration {
 /* ── window ─────────────────────────────────────────── */
 
 window {
+    transparency:    "real";
     background-color: transparent;
     border:           1px;
     border-color:     @text-main;

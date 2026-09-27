@@ -5,8 +5,8 @@ import signal
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from pomodoro_lib.commands import CommandRunner
 from pomodoro_lib.constants import (
@@ -53,7 +53,7 @@ def ensure_silence_mp3(silence_secs: int = ARC_SILENCE_SECONDS) -> Path:
                 "-f",
                 "lavfi",
                 "-i",
-                f"anullsrc=r=44100:cl=stereo",
+                "anullsrc=r=44100:cl=stereo",
                 "-t",
                 str(silence_secs),
                 "-q:a",
@@ -63,6 +63,7 @@ def ensure_silence_mp3(silence_secs: int = ARC_SILENCE_SECONDS) -> Path:
                 str(path),
             ],
             capture_output=True,
+            check=False,
         )
     return path
 
@@ -92,14 +93,16 @@ def build_arc_playlist(
     random.shuffle(tracks)
     silence = ensure_silence_mp3(silence_secs)
 
-    pl = tempfile.NamedTemporaryFile(mode="w", suffix=".m3u", delete=False)
-    # M3U format: one path per line
-    for track in tracks:
-        pl.write(f"{silence}\n")
-        pl.write(f"{track}\n")
-    pl.close()
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".m3u", delete=False
+    ) as pl:
+        playlist_path = Path(pl.name)
+        # M3U format: one path per line
+        for track in tracks:
+            pl.write(f"{silence}\n")
+            pl.write(f"{track}\n")
 
-    return Path(pl.name)
+    return playlist_path
 
 
 def play_finish_sound() -> None:
@@ -153,6 +156,7 @@ def say_label(say_dir: str, label: str) -> None:
             ["gtts-cli", label, "--output", str(out)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=False,
         )
         if not out.exists():
             return
@@ -167,7 +171,7 @@ def say_label(say_dir: str, label: str) -> None:
         pass  # long speech: keep playing, never block a phase past the cap
 
 
-# ── External tool helpers ─────────────────────────────────────────────────────
+# ── External tool helpers ──────────────────────────────────────────────────
 
 
 def notify(
@@ -194,7 +198,7 @@ def notify(
         cmd += ["-t", str(timeout)]
     cmd += [summary, body]
     try:
-        subprocess.run(cmd, capture_output=True)
+        subprocess.run(cmd, capture_output=True, check=False)
         return
     except FileNotFoundError:
         pass  # dunstify not installed
@@ -212,6 +216,7 @@ def notify(
                 "high" if urgency == "critical" else "normal",
             ],
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         # No notification daemon at all — log instead of crashing
@@ -223,6 +228,7 @@ def i3_workspace() -> None:
         subprocess.run(
             ["i3-msg", "workspace --no-auto-back-and-forth 🍅"],
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass  # not running under i3 (e.g. Termux)
@@ -246,6 +252,7 @@ def mpv_cmd(json_cmd: str) -> bool:
             capture_output=True,
             text=True,
             timeout=2,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return False
@@ -287,6 +294,7 @@ def _cliamp_running() -> bool:
             ["cliamp", "status"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=False,
         ).returncode
         == 0
     )
@@ -299,7 +307,13 @@ def _ensure_cliamp_playlist() -> None:
     tiny playlist points it at the lofi stream. ``realtime = true`` tells
     cliamp to treat the URL as live radio (reconnect after pause/disconnect).
     """
-    path = Path.home() / ".config" / "cliamp" / "playlists" / f"{CLIAMP_PLAYLIST}.toml"
+    path = (
+        Path.home()
+        / ".config"
+        / "cliamp"
+        / "playlists"
+        / f"{CLIAMP_PLAYLIST}.toml"
+    )
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -441,7 +455,7 @@ def kill_mpv() -> None:
     MPV_SOCKET.unlink(missing_ok=True)
 
 
-# ── TimerController ───────────────────────────────────────────────────────────
+# ── TimerController ───────────────────────────────────────────────────────
 
 
 class TimerController:
@@ -467,10 +481,11 @@ class TimerController:
         """Send a notification using the session's notify settings.
 
         *phase* is a key into ``notify_phases`` for per-event overrides
-        (``start``, ``pomodoro_done``, ``break_done``, ``reflect``, ``finished``, ``resumed``).
+        (``start``, ``pomodoro_done``, ``break_done``, ``reflect``,
+        ``finished``, ``resumed``).
 
-        Each value in ``notify_phases`` is a **list of entries** matching
-        the command-runner style:
+        Each ``notify_phases`` value is a list matching the command-runner
+        style:
           * A plain **dict** — applies every time.
           * A **list ``[dict, int]``** — only at that session index.
           * A **list ``[dict, "every:N"]``** — interval filtering.
@@ -531,7 +546,7 @@ class TimerController:
             timeout=timeout,
         )
 
-    # ── State persistence ─────────────────────────────────────────────────────
+    # ── State persistence ──────────────────────────────────────────────────
     def load_state(self) -> bool:
         self.state = PomodoroState.load(STATE_FILE)
         return self.state.is_active
@@ -563,7 +578,7 @@ class TimerController:
         FINISH_PLAYED.unlink(missing_ok=True)
         self.state = PomodoroState()
 
-    # ── Lifecycle ─────────────────────────────────────────────────────────────
+    # ── Lifecycle ────────────────────────────────────────────────────────
     def start(
         self,
         video: str,
@@ -615,7 +630,7 @@ class TimerController:
         self.save_state()
         if cliamp_mode:
             start_cliamp()
-        else:
+        elif video:
             start_mpv(video, audio_only, arc_mode, silence_secs)
         self._cmd_runner.run(
             "session_start",
@@ -634,7 +649,9 @@ class TimerController:
             session=start_session - 1,
             video=video,
         )
-        warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
+        warmup_note = (
+            f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
+        )
         self._notify(
             "🍅 Pomodoro started",
             f"Session {start_session}/{total}\n"
@@ -753,7 +770,7 @@ class TimerController:
         # route to the correct transition handler based on current phase.
         self._on_phase_end()
 
-    # ── Status (for polybar) ──────────────────────────────────────────────────
+    # ── Status (for polybar) ─────────────────────────────────────────────
     def status_line(self) -> str:
         if not STATE_FILE.exists():
             return ""
@@ -772,7 +789,9 @@ class TimerController:
                 icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
-            icon = "🏹" if state.arc_mode else "🎧" if state.cliamp_mode else "☕"
+            icon = (
+                "🏹" if state.arc_mode else "🎧" if state.cliamp_mode else "☕"
+            )
         elif state.phase == "reflect":
             secs = state.remaining_seconds
             icon = "🤔"
@@ -799,29 +818,39 @@ class TimerController:
                     label_idx < len(state.schedule_labels)
                     and state.schedule_labels[label_idx]
                 ):
-                    return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
+                    return (
+                        f"{icon} {mins:02d}:{secs_rem:02d}  "
+                        f"{state.schedule_labels[label_idx]}"
+                    )
             else:
                 label_idx = (state.current - 1) * 2
                 if (
                     label_idx < len(state.schedule_labels)
                     and state.schedule_labels[label_idx]
                 ):
-                    return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
-        return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
+                    return (
+                        f"{icon} {mins:02d}:{secs_rem:02d}  "
+                        f"{state.schedule_labels[label_idx]}"
+                    )
+        return (
+            f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
+        )
 
-    # ── Internal timer ────────────────────────────────────────────────────────
+    # ── Internal timer ────────────────────────────────────────────────────
     def _run_timer(self, seconds: int, callback: Callable[[], None]) -> None:
         self._thread = threading.Thread(
             target=self._timer_thread, args=(seconds, callback), daemon=True
         )
         self._thread.start()
 
-    def _timer_thread(self, seconds: int, callback: Callable[[], None]) -> None:
+    def _timer_thread(
+        self, seconds: int, callback: Callable[[], None]
+    ) -> None:
         if self._stop_event.wait(seconds):
             return  # stopped by pause/stop
         callback()
 
-    # ── Phase transitions (side effects, no timer management) ─────────────────
+    # ── Phase transitions (side effects, no timer management) ─────────────
 
     def _pause_on_break(self) -> bool:
         """Whether to pause video/audio during breaks.
@@ -885,7 +914,9 @@ class TimerController:
             TRANSITION_LOCK.unlink(missing_ok=True)
 
     def _transition_work_to_break_locked(self) -> None:
-        idx = self.state.current - 1  # 0-based index of the session just completed
+        idx = (
+            self.state.current - 1
+        )  # 0-based index of the session just completed
 
         # Look up the break_min for this session from schedule, if present
         if self.state.schedule and idx < len(self.state.schedule):
@@ -983,13 +1014,15 @@ class TimerController:
             self.state.work_min = self.state.schedule[idx][0]
 
         self.state.phase = "work"
-        self.state.end_ts = time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
+        self.state.end_ts = (
+            time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
+        )
 
         # Switch ARC audio source mid-session if configured
         # Format: [at_pomodoro, path, arc_mode?]
         #   arc_mode=True  → ARC directory (build playlist)
         #   arc_mode=False → regular video file
-        # When omitted, infer it from the path (directory → True, file → False).
+        # Infer mode from the path when omitted (directory or file).
         if self.state.arc_switches:
             at, target_path = (
                 self.state.arc_switches[0][0],
@@ -1074,7 +1107,7 @@ class TimerController:
             session=self.state.current - 2,
         )
 
-    # ── Phase transitions (full: side effects + timer management) ────────────
+    # ── Phase transitions (side effects + timer management) ───────────────
 
     def _on_phase_end(self) -> None:
         if not STATE_FILE.exists():
@@ -1085,10 +1118,12 @@ class TimerController:
         self._dispatch_transition()
 
     def _dispatch_transition(self) -> None:
-        """Perform the transition for the current phase and start a timer for the
-        new phase.  This is only reliable when the calling process stays alive."""
+        """Transition the current phase and start its timer.
+
+        This is only reliable while the calling process stays alive.
+        """
         if PAUSE_FILE.exists():
-            return  # paused – do not advance (polybar-driven handle_expired will)
+            return  # paused; polybar-driven handle_expired will advance
         if self.state.phase == "work":
             self._transition_work_to_break()
             if STATE_FILE.exists() and self.state.phase == "break":
@@ -1154,6 +1189,7 @@ class TimerController:
             "session_complete",
             work_min=work_min,
             total=total,
+            session=total - 1,
         )
 
     # ── Expired-phase check (polybar-driven transitions) ─────────────────────

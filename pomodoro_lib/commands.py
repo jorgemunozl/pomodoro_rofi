@@ -15,8 +15,8 @@ Each event maps to a **list of entries**.  An entry is either:
           "notify-send '🍅 Pomodoro {session}/{total} done!'",
       ],
 
-* A **list ``[command, index]``** — fires **only when ``session`` equals *index***
-  (0-based, so ``0`` = first pomodoro, ``1`` = second, …).
+* A **list ``[command, index]``** — fires only when ``session`` matches *index*
+    (0-based: ``0`` = first pomodoro, ``1`` = second, …).
 
   .. code:: python
 
@@ -44,19 +44,23 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-# ── Event names ────────────────────────────────────────────────────────────────
+_LOGGER = logging.getLogger(__name__)
+
+# ── Event names ──────────────────────────────────────────────────────────────
 # These are the canonical event names. Users reference them in EVENT_COMMANDS.
 
 EVENT_SESSION_START = "session_start"  # A new work session begins
 EVENT_POMODORO_BEGIN = "pomodoro_begin"  # Each work phase begins
 EVENT_POMODORO_DONE = "pomodoro_done"  # Work → break transition
 EVENT_BREAK_DONE = "break_done"  # Break → work transition
-EVENT_SESSION_COMPLETE = "session_complete"  # All pomodoros finished (reflect done)
+EVENT_SESSION_COMPLETE = (
+    "session_complete"  # All pomodoros finished (reflect done)
+)
 EVENT_BELL_30 = "bell_30"  # 30 seconds remaining in work
 EVENT_BELL_BEGIN = "bell_begin"  # 3 seconds remaining in work
 EVENT_BELL_END = "bell_end"  # Work period fully ended
 
-# ── Types ──────────────────────────────────────────────────────────────────────
+# ── Types ────────────────────────────────────────────────────────────────────
 # A command entry is either:
 #   - str             → fire always
 #   - [str, int]      → fire when session == index
@@ -94,7 +98,9 @@ class CommandsBuilder:
 class _PhaseConfig:
     """Fluent config for a single phase's commands."""
 
-    def __init__(self, parent: dict[str, list[CommandEntry]], event: str) -> None:
+    def __init__(
+        self, parent: dict[str, list[CommandEntry]], event: str
+    ) -> None:
         self._parent = parent
         self._event = event
 
@@ -120,7 +126,10 @@ class _FilteredCommand:
     """A command with a session filter, finalized by .run()."""
 
     def __init__(
-        self, parent: dict[str, list[CommandEntry]], event: str, filter_: int | str
+        self,
+        parent: dict[str, list[CommandEntry]],
+        event: str,
+        filter_: int | str,
     ) -> None:
         self._parent = parent
         self._event = event
@@ -145,10 +154,10 @@ class CommandRunner:
         self._commands: EventCommands = commands or {}
         self._log_path = log_path
 
-    # ── Public API ─────────────────────────────────────────────────────────────
+    # ── Public API ───────────────────────────────────────────────────────────
 
     def run(self, event: str, **context: object) -> None:
-        """Execute every command registered for *event*, substituting *context*.
+        """Execute commands registered for *event*, substituting context.
 
         Silently ignores unknown events (no-op).
         """
@@ -160,7 +169,7 @@ class CommandRunner:
         # Log after execution — can never block or break commands.
         self._log_event(event, entries, context)
 
-    # ── Config access ──────────────────────────────────────────────────────────
+    # ── Config access ────────────────────────────────────────────────────────
 
     @property
     def events(self) -> set[str]:
@@ -192,7 +201,7 @@ class CommandRunner:
                 )
         return cls(merged, log_path=log_path)
 
-    # ── Internal helpers ───────────────────────────────────────────────────────
+    # ── Internal helpers ─────────────────────────────────────────────────────
 
     def _format(self, raw: str, context: dict[str, object]) -> str:
         """Substitute ``{key}`` placeholders with values from *context*.
@@ -205,7 +214,9 @@ class CommandRunner:
         except KeyError:
             return raw  # leave unfilled placeholders as-is
 
-    def _execute(self, entry: CommandEntry, context: dict[str, object]) -> None:
+    def _execute(
+        self, entry: CommandEntry, context: dict[str, object]
+    ) -> None:
         """Run a single command entry, respecting session-index filtering."""
         # Unpack: plain string → always run,  [str, int|str] → filtered
         if isinstance(entry, list):
@@ -246,8 +257,8 @@ class CommandRunner:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        except Exception as exc:
-            logging.warning("CommandRunner: failed to run %r — %s", cmd, exc)
+        except OSError as exc:
+            _LOGGER.warning("CommandRunner: failed to run %r — %s", cmd, exc)
 
     def _log_event(
         self, event: str, entries: list, context: dict[str, object]
@@ -260,17 +271,21 @@ class CommandRunner:
         if not self._log_path:
             return
         try:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
             session = context.get("session", "?")
             with open(self._log_path, "a") as f:
-                f.write(f"[{ts}] ═══ {event}  session={session}  "
-                        f"{len(entries)} cmd(s) ═══\n")
+                f.write(
+                    f"[{ts}] ═══ {event}  session={session}  "
+                    f"{len(entries)} cmd(s) ═══\n"
+                )
                 for i, entry in enumerate(entries):
                     if isinstance(entry, list):
                         cmd, target = entry[0], entry[1]
-                        status = "▶" if target == session else f"⏭ (wants {target})"
+                        status = (
+                            "▶" if target == session else f"⏭ (wants {target})"
+                        )
                         f.write(f"[{ts}]   [{i}] {status}  {cmd}\n")
                     else:
                         f.write(f"[{ts}]   [{i}] ▶  {entry}\n")
-        except Exception:
-            pass  # logging must never break the app
+        except OSError as exc:
+            _LOGGER.debug("CommandRunner: failed to write event log: %s", exc)

@@ -1,5 +1,6 @@
 """CLI entry point — main menu loop, subcommands, and UI flow."""
 
+import logging
 import subprocess
 import sys
 import time
@@ -47,7 +48,14 @@ from pomodoro_lib.rofi import (
     rofi_menu,
 )
 from pomodoro_lib.state import PomodoroState
-from pomodoro_lib.timer import TimerController, fade_arc_volume, notify, play_bell
+from pomodoro_lib.timer import (
+    TimerController,
+    fade_arc_volume,
+    notify,
+    play_bell,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 # ── Shared command runner (wired from EVENT_COMMANDS) ────────────────────────
 _cmd_runner = CommandRunner(EVENT_COMMANDS, log_path=CMD_LOG_FILE)
@@ -68,7 +76,7 @@ def _runner_for_active_session() -> CommandRunner:
     return _cmd_runner
 
 
-# ── Polybar status line ───────────────────────────────────────────────────────
+# ── Polybar status line ─────────────────────────────────────────────────────
 
 
 def _status_line() -> str:
@@ -97,9 +105,12 @@ def _status_line() -> str:
                 if MPV_SOCKET.exists():
                     subprocess.run(
                         ["socat", "-", str(MPV_SOCKET)],
-                        input='{"command": ["set_property", "pause", false]}\n',
+                        input=(
+                            '{"command": ["set_property", "pause", false]}\n'
+                        ),
                         capture_output=True,
                         text=True,
+                        check=False,
                     )
         except (ValueError, OSError):
             pass
@@ -165,7 +176,8 @@ def _status_line() -> str:
                 play_bell(BELL_30_FILE)
                 runner.run(
                     EVENT_BELL_30,
-                    session=state.current - 2,  # 0-based: break after session N
+                    session=state.current
+                    - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -176,7 +188,8 @@ def _status_line() -> str:
                 play_bell(BELL_BEGIN_FILE)
                 runner.run(
                     EVENT_BELL_BEGIN,
-                    session=state.current - 2,  # 0-based: break after session N
+                    session=state.current
+                    - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -187,19 +200,22 @@ def _status_line() -> str:
         state.phase == "work"
         and not PAUSE_FILE.exists()
         and not (state.remaining_seconds > work_total)  # not in warm-up
-        and (state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES)
+        and (
+            state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES
+        )
+        and state.remaining_seconds <= 2
+        and not WORK_BELL_PLAYED.exists()
     ):
-        if state.remaining_seconds <= 2 and not WORK_BELL_PLAYED.exists():
-            try:
-                WORK_BELL_PLAYED.touch(exist_ok=False)
-                play_bell(BELL_END_FILE)
-                runner.run(
-                    EVENT_BELL_END,
-                    session=state.current - 1,  # 0-based: work session N
-                    total=state.total,
-                )
-            except FileExistsError:
-                pass  # another process already played it
+        try:
+            WORK_BELL_PLAYED.touch(exist_ok=False)
+            play_bell(BELL_END_FILE)
+            runner.run(
+                EVENT_BELL_END,
+                session=state.current - 1,  # 0-based: work session N
+                total=state.total,
+            )
+        except FileExistsError:
+            pass  # another process already played it
 
     # Show schedule label if available, otherwise session count
     if state.phase == "reflect":
@@ -212,18 +228,24 @@ def _status_line() -> str:
                 label_idx < len(state.schedule_labels)
                 and state.schedule_labels[label_idx]
             ):
-                return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
+                return (
+                    f"{icon} {mins:02d}:{secs_rem:02d}  "
+                    f"{state.schedule_labels[label_idx]}"
+                )
         else:
             label_idx = (state.current - 1) * 2
             if (
                 label_idx < len(state.schedule_labels)
                 and state.schedule_labels[label_idx]
             ):
-                return f"{icon} {mins:02d}:{secs_rem:02d}  {state.schedule_labels[label_idx]}"
+                return (
+                    f"{icon} {mins:02d}:{secs_rem:02d}  "
+                    f"{state.schedule_labels[label_idx]}"
+                )
     return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
 
-# ── Handlers (called from main loop) ──────────────────────────────────────────
+# ── Handlers ─────────────────────────────────────────────────────────────────
 
 
 def _lookup_default_rhythm(
@@ -318,7 +340,7 @@ def _handle_new_session(ctrl: TimerController) -> bool:
         elif step == 2:
             mode_choice = rofi_menu(
                 "Mode",
-                ["🖥  Play video (fullscreen)", "🎵  Audio only", BACK_LABEL],
+                ["🎵  Audio only", "🖥  Play video (fullscreen)", BACK_LABEL],
                 no_custom=True,
             )
             if mode_choice is None:
@@ -336,7 +358,11 @@ def _handle_new_session(ctrl: TimerController) -> bool:
                 work_min, break_min, total, warm_up_secs, schedule = rhythm
                 rhythm_choice = rofi_menu(
                     "Rhythm",
-                    ["🎯  Default rhythm", "✏️  Personalized rhythm", BACK_LABEL],
+                    [
+                        "🎯  Default rhythm",
+                        "✏️  Personalized rhythm",
+                        BACK_LABEL,
+                    ],
                     no_custom=True,
                 )
                 if rhythm_choice is None:
@@ -357,13 +383,13 @@ def _handle_new_session(ctrl: TimerController) -> bool:
                         cliamp_mode=cliamp_mode,
                     )
                     return True
-                # Personalized → fall through to step 4, keep warm_up_secs
+                # Personalized → continue to step 4 with warm_up_secs
 
             else:
                 # No preset — reset warm_up_secs
                 warm_up_secs = 0
 
-            # For personalized rhythm or non-default videos, show duration picker
+            # For personalized or non-default videos, show duration picker.
             step = 3
 
         elif step == 3:
@@ -473,7 +499,9 @@ def _list_videos() -> list[Path]:
     """List all video files in POMO_DIR."""
     if not POMO_DIR.is_dir():
         return []
-    return sorted(f for f in POMO_DIR.iterdir() if f.suffix in (".mp4", ".webm"))
+    return sorted(
+        f for f in POMO_DIR.iterdir() if f.suffix in (".mp4", ".webm")
+    )
 
 
 def _pick_random_video() -> Path | None:
@@ -499,7 +527,8 @@ def _ensure_mp3(video_path: Path) -> Path:
         return mp3_path
 
     print(
-        f"\U0001f3b5 Generating {mp3_path.name} from {video_path.name}...", flush=True
+        f"\U0001f3b5 Generating {mp3_path.name} from {video_path.name}...",
+        flush=True,
     )
     try:
         import subprocess
@@ -519,6 +548,7 @@ def _ensure_mp3(video_path: Path) -> Path:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode != 0:
             print(
@@ -575,12 +605,13 @@ def _ensure_cliamp_thumb() -> str:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         tmp.unlink(missing_ok=True)
         if result.returncode == 0 and thumb.exists():
             return str(thumb)
-    except Exception:
-        pass
+    except OSError as exc:
+        _LOGGER.debug("Could not download the CLIAMP thumbnail: %s", exc)
 
     # Fallback: dark 250x250 tile with "LOFI" text
     try:
@@ -597,7 +628,8 @@ def _ensure_cliamp_thumb() -> str:
                 "color=c=0x1e1e2e:s=250x250",
                 "-vf",
                 (
-                    "drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    "drawtext=fontfile=/usr/share/fonts/TTF/"
+                    "DejaVuSans-Bold.ttf"
                     ":text='LOFI':fontcolor=0xf9e2af:fontsize=48"
                     ":x=(w-text_w)/2:y=(h-text_h)/2"
                 ),
@@ -607,11 +639,12 @@ def _ensure_cliamp_thumb() -> str:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0 and thumb.exists():
             return str(thumb)
-    except Exception:
-        pass
+    except OSError as exc:
+        _LOGGER.debug("Could not generate the CLIAMP thumbnail: %s", exc)
 
     # Last resort: 1x1 dark pixel
     try:
@@ -620,8 +653,10 @@ def _ensure_cliamp_thumb() -> str:
         img = Image.new("RGB", (1, 1), color=(30, 30, 46))
         img.save(thumb, "JPEG")
         return str(thumb)
-    except ImportError:
-        pass
+    except (ImportError, OSError) as exc:
+        _LOGGER.debug(
+            "Could not create the CLIAMP fallback thumbnail: %s", exc
+        )
 
     return ""
 
@@ -653,11 +688,14 @@ def _ensure_arc_thumb() -> str:
                 "-i",
                 (
                     "color=c=0x1e1e2e:s=250x250"
-                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/"
+                    "DejaVuSans-Bold.ttf"
                     ":text='CURRENT ARC'"
-                    ":fontcolor=0xcdd6f4:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2-10"
+                    ":fontcolor=0xcdd6f4:fontsize=24:"
+                    "x=(w-text_w)/2:y=(h-text_h)/2-10"
                     ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans.ttf"
-                    ":text='🎶':fontcolor=0xf9e2af:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2+20"
+                    ":text='🎶':fontcolor=0xf9e2af:fontsize=48:"
+                    "x=(w-text_w)/2:y=(h-text_h)/2+20"
                 ),
                 "-frames:v",
                 "1",
@@ -665,11 +703,12 @@ def _ensure_arc_thumb() -> str:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0 and thumb.exists():
             return str(thumb)
-    except Exception:
-        pass
+    except OSError as exc:
+        _LOGGER.debug("Could not generate the ARC thumbnail: %s", exc)
 
     # Fallback: create a minimal valid JPEG (1x1 red pixel)
     # Using Pillow if available, otherwise a raw minimal JPEG
@@ -679,8 +718,8 @@ def _ensure_arc_thumb() -> str:
         img = Image.new("RGB", (1, 1), color=(30, 30, 46))
         img.save(thumb, "JPEG")
         return str(thumb)
-    except ImportError:
-        pass
+    except (ImportError, OSError) as exc:
+        _LOGGER.debug("Could not create the ARC fallback thumbnail: %s", exc)
 
     # Last resort: 1x1 blue JPEG as raw bytes
     minimal_jpg = bytes(
@@ -1332,7 +1371,8 @@ def _ensure_arc_thumb() -> str:
         with open(thumb, "wb") as f:
             f.write(minimal_jpg)
         return str(thumb)
-    except Exception:
+    except OSError as exc:
+        _LOGGER.debug("Could not write the ARC placeholder thumbnail: %s", exc)
         return ""
 
 
@@ -1357,13 +1397,19 @@ def _handle_start(args: list[str]) -> None:
         "--video",
         "-v",
         required=True,
-        help="Video filename (e.g. 'study.mp4'), 'random', or 'arc' for CURRENT_ARC soundtrack",
+        help=(
+            "Video filename (e.g. 'study.mp4'), 'random', or 'arc' for "
+            "CURRENT_ARC soundtrack"
+        ),
     )
     parser.add_argument(
         "--rhythm",
         "-r",
         default="default",
-        help='Rhythm: "default" to use the video\'s preset, or "work-break" like "25-5"',
+        help=(
+            'Rhythm: "default" to use the video\'s preset, or '
+            '"work-break" like "25-5"'
+        ),
     )
     parser.add_argument(
         "--count",
@@ -1442,7 +1488,9 @@ def _handle_start(args: list[str]) -> None:
     # Look up video preset first (to get warm_up_secs regardless of mode)
     rhythm_data = _lookup_default_rhythm(video_name)
     if rhythm_data is not None:
-        _preset_work, _preset_break, _preset_total, warm_up_secs, schedule = rhythm_data
+        _preset_work, _preset_break, _preset_total, warm_up_secs, schedule = (
+            rhythm_data
+        )
 
     if parsed.rhythm and parsed.rhythm.lower() != "default":
         # User passed a custom rhythm like "25-5" or "50-10"
@@ -1524,7 +1572,7 @@ def _handle_start(args: list[str]) -> None:
         ctrl.clear_state()
 
 
-# ── Startup preset handler ──────────────────────────────────────────────────────
+# Startup preset handler
 
 
 def _run_session_loop(ctrl: TimerController) -> bool:
@@ -1582,7 +1630,9 @@ def _start_preset_session(
     """
     preset = STARTUP_PRESETS[preset_name]
 
-    total = len(preset.schedule)
+    schedule = preset.timing_schedule
+    phase_labels = preset.phase_labels
+    total = len(schedule)
     if not 1 <= from_schedule <= total:
         print(
             f"Error: --from must be between 1 and {total} "
@@ -1595,12 +1645,13 @@ def _start_preset_session(
     preset_runner = CommandRunner.merge(
         EVENT_COMMANDS,
         getattr(preset, "commands", None),
+        preset.schedule_commands,
         log_path=CMD_LOG_FILE,
     )
 
     ctrl = TimerController(cmd_runner=preset_runner)
 
-    first_work, first_break = preset.schedule[from_schedule - 1]
+    first_work, first_break = schedule[from_schedule - 1]
 
     # ── Determine start mode from start_dir ────────────────────────────────
     # Directory → arc_mode (build shuffled playlist from directory contents)
@@ -1630,13 +1681,13 @@ def _start_preset_session(
         warm_up_secs = 0
 
     ctrl.start(
-        video=preset.start_dir,
+        video=preset.start_dir or "",
         work_min=first_work,
         break_min=first_break,
         total=total,
         warm_up_secs=warm_up_secs,
-        schedule=preset.schedule,
-        schedule_labels=preset.labels,
+        schedule=schedule,
+        schedule_labels=phase_labels,
         audio_only=audio_only,
         arc_mode=arc_mode,
         silence_secs=silence_secs,
@@ -1681,7 +1732,9 @@ def _start_video_session(video_name: str) -> TimerController:
 
     video_path = _resolve_video(video_name)
     if video_path is None:
-        raise FileNotFoundError(f"Video '{video_name}' not found in {POMO_DIR}")
+        raise FileNotFoundError(
+            f"Video '{video_name}' not found in {POMO_DIR}"
+        )
 
     ctrl = TimerController(cmd_runner=_cmd_runner)
 
@@ -1700,7 +1753,7 @@ def _start_video_session(video_name: str) -> TimerController:
 
 def _resolve_chain_step(step) -> tuple[str, str | None]:
     """Resolve a video or preset, including day-cycled lists."""
-    day = datetime.now().day
+    day = datetime.now().astimezone().day
 
     if isinstance(step, list):
         n = len(step)
@@ -1746,7 +1799,9 @@ def _handle_chain(name: str) -> None:
 
         interrupted = _run_session_loop(ctrl)
         if interrupted:
-            print(f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}.")
+            print(
+                f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}."
+            )
             return
 
     print(f"\n⛓  Chain '{name}' complete! \U0001f389")
@@ -1769,7 +1824,7 @@ def _handle_startup_preset(name: str, from_schedule: int = 1) -> None:
     _run_session_loop(ctrl)
 
 
-# ── Subcommand dispatch ───────────────────────────────────────────────────────
+# ── Subcommand dispatch ────────────────────────────────────────────────────
 
 
 def _handle_random() -> None:
@@ -1784,8 +1839,8 @@ def _handle_random() -> None:
     pid = os.fork()
     if pid > 0:
         print(f"🎲 Random pomodoro started (PID {pid})")
-        print(f"   pomodoro skip_random  →  skip to next video")
-        print(f"   pomodoro stop         →  stop completely")
+        print("   pomodoro skip_random  →  skip to next video")
+        print("   pomodoro stop         →  stop completely")
         return  # parent exits, terminal is free
 
     os.setsid()  # detach from terminal
@@ -1817,12 +1872,19 @@ def _handle_random() -> None:
     for v in videos:
         rhythm_data = _lookup_default_rhythm(v.name)
         if rhythm_data is None:
-            work_min, break_min, total, warm_up_secs, schedule = 50, 10, 2, 0, None
+            work_min, break_min, total, warm_up_secs, schedule = (
+                50,
+                10,
+                2,
+                0,
+                None,
+            )
         else:
             work_min, break_min, total, warm_up_secs, schedule = rhythm_data
 
         print(
-            f"\n🎲 {v.name}  —  {work_min}min × {total}  (pomodoro skip_random to skip)",
+            f"\n🎲 {v.name}  —  {work_min}min × {total}  "
+            "(pomodoro skip_random to skip)",
             flush=True,
         )
 
@@ -1867,9 +1929,9 @@ def _handle_log() -> None:
 
     if CMD_LOG_FILE.exists():
         cmd_lines = [
-            l.strip()
-            for l in CMD_LOG_FILE.read_text().splitlines()
-            if l.strip() and l.startswith(f"[{today_str} ")
+            log_line.strip()
+            for log_line in CMD_LOG_FILE.read_text().splitlines()
+            if log_line.strip() and log_line.startswith(f"[{today_str} ")
         ]
         if cmd_lines:
             print(f"── Commands run today ({today_str}) ──")
@@ -1912,13 +1974,17 @@ def _handle_list() -> None:
     print()
     print("📀 Special video sources (--video <value>)")
     arc_status = "✓" if ARC_SOUNDTRACK.exists() else "✗ missing"
-    print(f"  {'arc / CURRENT_ARC':<20} ARC soundtrack  {ARC_SOUNDTRACK}  {arc_status}")
+    print(
+        f"  {'arc / CURRENT_ARC':<20} ARC soundtrack  "
+        f"{ARC_SOUNDTRACK}  {arc_status}"
+    )
     past_status = "✓" if PAST_ARC_FILE.exists() else "✗ missing"
     print(
-        f"  {'past_arc / PAST_ARC':<20} music folder    {PAST_ARC_FILE}  {past_status}"
+        f"  {'past_arc / PAST_ARC':<20} music folder    "
+        f"{PAST_ARC_FILE}  {past_status}"
     )
     print(f"  {'cliamp / lofi':<20} CLIAMP lofi radio ({CLIAMP_LOFI_URL})")
-    print(f"  {'random':<20} random video from {POMO_DIR}")
+    print(f"  {'random':<20} random video from " f"{POMO_DIR}")
 
     # ── Startup presets ────────────────────────────────────────────────────
     print()
@@ -1985,13 +2051,14 @@ def _run_subcommand(args: list[str]) -> None:
         _handle_chain(cmd)
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|random|log|<chain>|<preset>}",
+            "usage: pomodoro {status|toggle|stop|next|start|random|log|"
+            "<chain>|<preset>}",
             file=sys.stderr,
         )
         sys.exit(1)
 
 
-# ── Main menu loop ────────────────────────────────────────────────────────────
+# ── Main menu loop ─────────────────────────────────────────────────────────
 
 
 def _run_ui() -> None:
@@ -2024,7 +2091,7 @@ def _run_ui() -> None:
             notify("🍅 Pomodoro", "All state cleared.")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────
 
 
 def main() -> None:

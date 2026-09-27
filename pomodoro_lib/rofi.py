@@ -1,5 +1,6 @@
 """Rofi menu helpers — pure functions wrapping subprocess calls."""
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from pomodoro_lib.constants import (
     POMO_DIR,
     ROFI_THEME,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _rofi(
@@ -29,7 +32,9 @@ def _rofi(
         cmd.extend(extra_flags)
 
     stdin = raw_input if raw_input is not None else "\n".join(options)
-    result = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, input=stdin, capture_output=True, text=True, check=False
+    )
     out = result.stdout.strip()
     return out if out else None
 
@@ -63,7 +68,8 @@ def _ensure_back_thumb() -> str:
                 "-i",
                 (
                     "color=c=0x313244:s=250x250"
-                    ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+                    ":drawtext=fontfile=/usr/share/fonts/TTF/"
+                    "DejaVuSans-Bold.ttf"
                     ":text='↩':fontcolor=0xcdd6f4:fontsize=72"
                     ":x=(w-text_w)/2:y=(h-text_h)/2-10"
                     ":drawtext=fontfile=/usr/share/fonts/TTF/DejaVuSans.ttf"
@@ -76,11 +82,12 @@ def _ensure_back_thumb() -> str:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0 and thumb.exists():
             return str(thumb)
-    except Exception:
-        pass
+    except OSError as exc:
+        _LOGGER.debug("Could not generate the Rofi back thumbnail: %s", exc)
 
     # Fallback: 1x1 dark pixel
     from PIL import Image
@@ -106,8 +113,15 @@ def pick_video(
     Returns the selected filename, "CURRENT_ARC", "PAST_ARC", "CLIAMP",
     or None.
     """
-    videos = sorted(f for f in videos_dir.iterdir() if f.suffix in (".mp4", ".webm"))
-    if not videos and not arc_thumb and not past_arc_thumb and not cliamp_thumb:
+    videos = sorted(
+        f for f in videos_dir.iterdir() if f.suffix in (".mp4", ".webm")
+    )
+    if (
+        not videos
+        and not arc_thumb
+        and not past_arc_thumb
+        and not cliamp_thumb
+    ):
         return None
 
     # Build raw input with \0icon\x1f for thumbnails
@@ -156,8 +170,11 @@ def pick_video(
 
 
 def pick_duration() -> tuple[int, int] | None:
-    """Pick from duration presets + custom. Returns (work_min, break_min) or None."""
-    labels = [label for label, _, _ in DURATION_PRESETS] + [CUSTOM_LABEL, BACK_LABEL]
+    """Pick a duration; return work/break minutes, or None."""
+    labels = [label for label, _, _ in DURATION_PRESETS] + [
+        CUSTOM_LABEL,
+        BACK_LABEL,
+    ]
     choice = _rofi("Pick duration", labels)
     if not choice or choice == BACK_LABEL:
         return None

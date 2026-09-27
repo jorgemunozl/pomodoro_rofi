@@ -18,12 +18,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Config ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from pomodoro_lib.constants import SOUNDS_DIR  # noqa: E402
+from pomodoro_lib.constants import SOUNDS_DIR  # noqa
 
 PREFIX = "say_time"
 
@@ -49,6 +49,7 @@ def generate_one(hour: int, minute: int, meridiem: str) -> tuple[str, str]:
         ["gtts-cli", text, "--output", str(out_path)],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         return out_path.name, f"FAILED: {result.stderr.strip()[:100]}"
@@ -77,7 +78,9 @@ def main() -> None:
 
     # Count how many already exist
     existing = sum(
-        1 for h, m, mer in tasks if (SOUNDS_DIR / minute_filename(h, m, mer)).exists()
+        1
+        for h, m, mer in tasks
+        if (SOUNDS_DIR / minute_filename(h, m, mer)).exists()
     )
     print(f"📁 {SOUNDS_DIR}")
     print(
@@ -91,7 +94,8 @@ def main() -> None:
     if args.jobs > 1:
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             futures = {
-                pool.submit(generate_one, h, m, mer): (h, m, mer) for h, m, mer in tasks
+                pool.submit(generate_one, h, m, mer): (h, m, mer)
+                for h, m, mer in tasks
             }
             for fut in as_completed(futures):
                 name, status = fut.result()
