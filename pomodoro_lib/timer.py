@@ -93,9 +93,7 @@ def build_arc_playlist(
     random.shuffle(tracks)
     silence = ensure_silence_mp3(silence_secs)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".m3u", delete=False
-    ) as pl:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".m3u", delete=False) as pl:
         playlist_path = Path(pl.name)
         # M3U format: one path per line
         for track in tracks:
@@ -139,12 +137,8 @@ def say_label(say_dir: str, label: str) -> None:
     """Speak a phase label with gtts, caching the mp3 under say_dir.
 
     Generates the mp3 with gtts-cli the first time a label is needed, then
-    plays it with a one-shot mpv process. Missing generation (no network)
-    is silently skipped.
-
-    Blocks until the speech finishes (up to 6 seconds) so the announcement
-    is fully heard even when the caller is a short-lived transition process
-    (e.g. polybar's ``pomodoro status``).
+    plays it with a one-shot mpv process (fire and forget). Missing
+    generation (no network) is silently skipped.
     """
     if not label or not say_dir:
         return
@@ -156,19 +150,14 @@ def say_label(say_dir: str, label: str) -> None:
             ["gtts-cli", label, "--output", str(out)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            check=False,
         )
         if not out.exists():
             return
-    proc = subprocess.Popen(
-        ["mpv", "--no-terminal", "--no-video", "--volume=130", str(out)],
+    subprocess.Popen(
+        ["mpv", "--no-terminal", "--no-video", str(out)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        pass  # long speech: keep playing, never block a phase past the cap
 
 
 # ── External tool helpers ──────────────────────────────────────────────────
@@ -307,13 +296,7 @@ def _ensure_cliamp_playlist() -> None:
     tiny playlist points it at the lofi stream. ``realtime = true`` tells
     cliamp to treat the URL as live radio (reconnect after pause/disconnect).
     """
-    path = (
-        Path.home()
-        / ".config"
-        / "cliamp"
-        / "playlists"
-        / f"{CLIAMP_PLAYLIST}.toml"
-    )
+    path = Path.home() / ".config" / "cliamp" / "playlists" / f"{CLIAMP_PLAYLIST}.toml"
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -649,9 +632,7 @@ class TimerController:
             session=start_session - 1,
             video=video,
         )
-        warmup_note = (
-            f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
-        )
+        warmup_note = f"🔥 {warm_up_secs}s warm-up, then " if warm_up_secs else ""
         self._notify(
             "🍅 Pomodoro started",
             f"Session {start_session}/{total}\n"
@@ -789,9 +770,7 @@ class TimerController:
                 icon = "⏸"
         elif state.phase == "break":
             secs = state.remaining_seconds
-            icon = (
-                "🏹" if state.arc_mode else "🎧" if state.cliamp_mode else "☕"
-            )
+            icon = "🏹" if state.arc_mode else "🎧" if state.cliamp_mode else "☕"
         elif state.phase == "reflect":
             secs = state.remaining_seconds
             icon = "🤔"
@@ -832,9 +811,7 @@ class TimerController:
                         f"{icon} {mins:02d}:{secs_rem:02d}  "
                         f"{state.schedule_labels[label_idx]}"
                     )
-        return (
-            f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
-        )
+        return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
     # ── Internal timer ────────────────────────────────────────────────────
     def _run_timer(self, seconds: int, callback: Callable[[], None]) -> None:
@@ -843,9 +820,7 @@ class TimerController:
         )
         self._thread.start()
 
-    def _timer_thread(
-        self, seconds: int, callback: Callable[[], None]
-    ) -> None:
+    def _timer_thread(self, seconds: int, callback: Callable[[], None]) -> None:
         if self._stop_event.wait(seconds):
             return  # stopped by pause/stop
         callback()
@@ -914,9 +889,7 @@ class TimerController:
             TRANSITION_LOCK.unlink(missing_ok=True)
 
     def _transition_work_to_break_locked(self) -> None:
-        idx = (
-            self.state.current - 1
-        )  # 0-based index of the session just completed
+        idx = self.state.current - 1  # 0-based index of the session just completed
 
         # Look up the break_min for this session from schedule, if present
         if self.state.schedule and idx < len(self.state.schedule):
@@ -1014,9 +987,7 @@ class TimerController:
             self.state.work_min = self.state.schedule[idx][0]
 
         self.state.phase = "work"
-        self.state.end_ts = (
-            time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
-        )
+        self.state.end_ts = time.time() + self.state.work_min * 60 + EXTRA_WORK_SECS
 
         # Switch ARC audio source mid-session if configured
         # Format: [at_pomodoro, path, arc_mode?]

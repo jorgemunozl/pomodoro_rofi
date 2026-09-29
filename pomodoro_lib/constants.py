@@ -5,8 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 ScheduleEntry = (
-    tuple[list, tuple[str, str]]
-    | tuple[list, tuple[str, str], tuple[str, str] | None]
+    tuple[list, tuple[str, str]] | tuple[list, tuple[str, str], tuple[str, str] | None]
 )
 
 
@@ -49,7 +48,7 @@ class StartupPreset:
     notify_desc: str = field(default="", kw_only=True)
     notify_timeout: int = field(default=0, kw_only=True)
     notify_phases: dict | None = field(default=None, kw_only=True)
-    say_label: bool = field(default=False, kw_only=True)
+    say_label: bool = field(default=True, kw_only=True)
 
     @property
     def timing_schedule(self) -> list[list]:
@@ -78,9 +77,9 @@ ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
-EXTRA_WORK_SECS = (
-    2.5  # extra seconds added to every work phase (25:00 → 25:03)
-)
+EXTRA_WORK_SECS = 2.5  # extra seconds added to every work phase (25:00 → 25:03)
+
+TEST_PHASE_SECS = 7  # phase length in a preset's --test run
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
@@ -97,6 +96,12 @@ open_zk = (
     'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && '
     'exec /usr/bin/obsidian "obsidian://open?vault=second-brain"'
 )
+
+current_arc = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    '/usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FArc Spring 2026 III Infinite Thinker"'
+)
+
 open_personal = (
     'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
     'exec /usr/bin/obsidian "obsidian://open?vault=personal"'
@@ -110,6 +115,14 @@ open_network = (
     'exec /usr/bin/obsidian "obsidian://open?vault=networking"'
 )
 
+core_tasks = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && /usr/bin/obsidian "obsidian://open?vault=social&file=permanent-notes%2Fmlpdft Core task to advance at light speed"'
+
+metrics = "python ~/project/metrics/metrics_server.py & firefox http://127.0.0.1:8000"
+
+applications = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fapplications"'
+
+budget = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fmoney-managment"'
+
 open_chess = (
     'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && '
     'firefox --no-remote "https://www.chess.com/home"'
@@ -121,7 +134,7 @@ open_git = (
 open_zed = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed'
 open_uta = (
     'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && '
-    'mpv --fullscreen /home/jorge/Videos/kamado.webm'
+    "mpv --fullscreen /home/jorge/Videos/kamado.webm"
 )
 open_terminal_riced = (
     'alacritty -e bash -c "python3 ~/dotfiles/arc/src/start.py 2; exec bash"'
@@ -134,25 +147,27 @@ open_mine = 'pomodoro --video "mine_2025_II.webm"'
 open_shinjuku_2 = 'pomodoro --video "shinjuku2.mp4"'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
-monday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Mondays are about assist to classes and talk with Jeff"'
+monday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Mondays are about assist to classes and talk with Jeff"'
 
-thursday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays is for advance the MACE paper and classical mechanics duty"'
+thursday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays is for advance the MACE paper and classical mechanics duty"'
 
-wednesday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Wednesdays is about assist to classes and advance MACE paper"'
+wednesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Wednesdays is about assist to classes and advance MACE paper"'
 
-tuesday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays are about advance MACE paper at the morning and mathematical methods exam"'
+tuesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays are about advance MACE paper at the morning and mathematical methods exam"'
 
-friday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"'
+friday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"'
 
-saturday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker saturdays i go to the library to advance the paper and prepare ourselves for the sunday at night"'
+saturday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker saturdays i go to the library to advance the paper and prepare ourselves for the sunday at night"'
 
-sunday='i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
+sunday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
 
 current_day = datetime.now().astimezone().day
+
 
 def return_day_of_week() -> str:
     """Return the current day of the week as a string."""
     return datetime.now().astimezone().strftime("%A").lower()
+
 
 open_journal_work = str(eval(return_day_of_week()))
 
@@ -189,7 +204,6 @@ cliamp_start = "cliamp --daemon"
 cliamp_pause = "cliamp pause"
 cliamp_play = "cliamp play"
 cliamp_stop = "cliamp stop"
-
 
 
 COMMANDS: dict[str, str] = {
@@ -299,10 +313,6 @@ COUNT_OPTIONS = [
 
 BACK_LABEL = "↩ Back"
 
-
-# ── Notification colors ────────────────────────────────────────────────────
-# Map color names to dunst urgency levels. Configure your dunstrc per urgency.
-
 NOTIFY_COLORS: dict[str, str] = {
     "default": "critical",
     "red": "critical",
@@ -312,92 +322,116 @@ NOTIFY_COLORS: dict[str, str] = {
     "purple": "normal",
 }
 
-STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = {
+STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
+    "morning_ritual_spring_thinker": StartupPreset(
+        [
+            ([4, 1], ("clean myself", "set up"), (open_uta, "open uta break")),
+            ([15, 5], ("first", "nets time"), (nets, "nets break")),
+            ([16, 1], ("second", "break"), (nets, "nets break")),
+            ([16, 1], ("third", "it's over"), (nets, "nets break")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "one hour morning, at cec, from seven to eigth",
+    ),
+    "morning_bus_spring_thinker": StartupPreset(
+        [
+            ([16, 3], ("read", "phase")),
+            ([6, 1], ("arrive uni", "phase")),
+            ([20, 1], ("laptop mace", "phase")),
+            ([11, 1], ("claude", "home arrive protocol")),
+        ],
+        str(ARC_SOUNDTRACK),
+        "bus and walking, morning, 5:20 from 6.30",
+    ),
+    "noon_ritual_spring_thinker": StartupPreset(
+        [
+            (
+                [11, 2],
+                ("spaced repetition session one", "spaced repetition break"),
+                (open_zk, "pomodoro_done"),
+            ),
+            ([11, 2], ("spaced repetition session two", "spaced repetition break")),
+            (
+                [11, 2],
+                ("spaced repetition session three", "spaced repetition break"),
+                (open_personal, "pomodoro_done"),
+            ),
+            ([6, 2], ("predict the future work", "personal prepared")),
+            ([8, 0], ("personal read", "")),
+        ],
+        str(ARC_SOUNDTRACKS_PAST),
+        "after nap, pray already did it,1:05 to 2",
+    ),
     "afternoon_bus_spring_thinker": StartupPreset(
         [
-            ([9 , 4], ("leaving uni" , "bus task"            )),
-            ([5 , 1], ("chess"       , "phase"               )),
-            ([20, 3], ("read"        , "phase"               )),
+            ([9, 4], ("leaving uni", "bus task")),
+            ([5, 1], ("chess", "phase")),
+            ([20, 3], ("read", "phase")),
             ([12, 4], ("walk to home", "home arrive protocol")),
         ],
         str(ARC_SOUNDTRACK),
         "bus and walking, afternoon, 5:20 from 5:50",
     ),
-    "morning_bus_spring_thinker": StartupPreset(
-        [
-            ([16, 3], ("read"       ,"phase"               )),
-            ([6 , 1], ("arrive uni" ,"phase"               )),
-            ([20, 1], ("laptop mace","phase"               )),
-            ([11, 1], ("claude"     ,"home arrive protocol")),
-        ],
-        str(ARC_SOUNDTRACK),
-        "bus and walking, morning, 5:20 from 6.30",
-    ),
     "night_jeff_spring_thinker": StartupPreset(
         [
-            ([11,10],("greet"  ,"science" )),
-            ([8 , 5],("special","break"   )),
-            ([22, 2],("chess"  ,"goodbye" )),
+            ([11, 10], ("greet", "science")),
+            ([8, 5], ("special", "break")),
+            ([22, 2], ("chess", "goodbye")),
         ],
         str(None),
-        "Monday and thursday call to Jeff"
+        "Monday and thursday call to Jeff",
     ),
-    "night_fastritual_spring_thinker": StartupPreset(
+    "night_fast_ritual_spring_thinker": StartupPreset(
         [
-            ([8, 0], ("core tasks"    ,""           ), ("cliamp_play"  ,"pomodoro_done")),
-            ([8, 0], ("applications"  ,""           ), ("cliamp_play"  ,"pomodoro_done")),
-            ([1, 0], ("log metrics"   ,""           ), (metrics,"pomodoro_done")),
-            ([7, 6], ("journal/work"  ,"journal/day"), (open_journal_work ,"pomodoro_done")),
-            ([6, 4], ("reflect a note","tidy"       ), (turn,"pomodoro_done")),
+            ([8, 0], ("core tasks", ""), (core_tasks, "pomodoro_done")),
+            ([8, 0], ("applications", ""), (applications, "pomodoro_done")),
+            ([1, 0], ("log metrics", ""), (metrics, "pomodoro_done")),
+            (
+                [7, 6],
+                ("journal/work", "journal/day"),
+                (open_journal_work, "pomodoro_done"),
+            ),
+            ([6, 4], ("reflect a note", "tidy")),
         ],
         str(ARC_SOUNDTRACK),
         "40 min, fast version of night ritual",
     ),
     "night_ritual_spring_thinker": StartupPreset(
         [
-            ([15,1], ("applications"  ,"phase"      )),
-            ([8, 6], ("core task time","tidy"       )),
-            ([8, 1], ("review arc"    ,"phase"      )),
-            ([8, 1], ("budget"        ,"phase"      )),
-            ([2, 6], ("log metrics"   ,"break 6 min")),
-            ([8 ,7], ("journal/work"  ,"journal/day")),
-            ([7, 3], ("reflect a note","tidy"       )),
-            ([4, 1], ("going to sleep","turn off"   )),
-        ], # 87
+            ([15, 1], ("applications", "phase"), (applications, "pomodoro_done")),
+            ([8, 6], ("core task time", "tidy"), (core_tasks, "pomodoro_done")),
+            ([8, 1], ("review arc", "phase"), (current_arc, "pomodoro_done")),
+            ([8, 1], ("budget", "phase"), (budget, "pomodoro_done")),
+            ([2, 6], ("log metrics", "break 6 min"), (metrics, "pomodoro_done")),
+            (
+                [8, 7],
+                ("journal/work", "journal/day"),
+                (open_journal_work, "pomodoro_done"),
+            ),
+            ([7, 3], ("reflect a note", "tidy"), ("", "pomodoro_done")),
+            ([4, 1], ("going to sleep", "turn off"), ("", "pomodoro_done")),
+        ],  # 87
         str(ARC_SOUNDTRACK),
-        "spring night begin at eight"
+        "spring night begin at eight",
     ),
-    "noon_ritual_spring_thinker": StartupPreset(
-        [
-            ([11, 2], ("spaced repetition session one"  ,"spaced repetition break")),
-            ([11, 2], ("spaced repetition session two"  ,"spaced repetition break")),
-            ([11, 2], ("spaced repetition session three","spaced repetition break")),
-            ([6,  2], ("predict the future work"        ,"personal prepared"      )),
-            ([8,  0], ("personal read"                  ,""                       )),
-        ],
-        str(ARC_SOUNDTRACKS_PAST),
-        "after nap, pray already did it,1:05 to 2",
-    ),
-    "morning_ritual_spring_thinker": StartupPreset(
-        [
-            ([4 , 1], ("clean myself","set up"   )),
-            ([15, 5], ("first"       ,"break"    )),
-            ([16, 1], ("second"      ,"break"    )),
-            ([16, 1], ("third"       ,"it's over")),
-        ],
-        str(ARC_SOUNDTRACK),
-        "one hour morning, at cec, from seven to eigth",
-    ),
+}
+
+STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = STARTUP_PRESETS_SPRING_THINKER
+
+STARTUP_PRESETS_REGISTRY_RESEARCHY: dict[str, StartupPreset] = {
     "morning_wakeup_winter_researchy": StartupPreset(
         [
-            ([4 , 3], ("pray", "prepare myself for the morning")),
+            ([4, 3], ("pray", "prepare myself for the morning")),
             ([21, 5], ("polymath first session", "nets break")),
-            ([21, 5], ("polymath second session, morning warm up", "schedule the morning")),
+            (
+                [21, 5],
+                ("polymath second session, morning warm up", "schedule the morning"),
+            ),
         ],
         str(ARC_SOUNDTRACK),
         "morning winter ritual",
     ),
-    "afternoon_problem_solving": StartupPreset(
+    "afternoon_problem_solving_researchy": StartupPreset(
         [
             ([29, 1], ("problem solving", "review")),
             ([29, 1], ("problem solving", "review")),
@@ -408,7 +442,7 @@ STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = {
             "days I think that is proper"
         ),
     ),
-    "cleaning": StartupPreset(
+    "cleaning_researchy": StartupPreset(
         [([25, 0], ("cleaning, washing", ""))],
         str(ARC_CLEANING),
         "cleaning",

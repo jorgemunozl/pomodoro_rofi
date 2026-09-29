@@ -1,43 +1,7 @@
 #!/usr/bin/env python3
 """Pomodoro timer — Rofi-powered with polybar integration.
 
-Usage:
-    pomodoro                            Launch the rofi UI
-    pomodoro status                     Print polybar status line
-    pomodoro --list                     List video presets, arc sources, presets, chains
-    pomodoro --command <name>            Run a named command (see --list)
-    pomodoro toggle                     Pause/resume current session
-    pomodoro stop                       Stop current session
-    pomodoro next                       Skip to the next phase
-    pomodoro start [options]            Start a session with CLI arguments
-    pomodoro startup                    Start the ARC startup preset
-                                        (15m polymath → 2m set-up → 13m applications)
-    pomodoro <preset> [--from N]        Run a preset; --from N starts at the Nth
-                                        schedule entry (1-based), skipping earlier ones
-    pomodoro <chain>                    Run a chain of sessions back-to-back
-                                        (see CHAINS in pomodoro_lib/config.py)
-    pomodoro --video <file> [options]   (shorthand, same as start)
-
-Options (for start / direct flags):
-    --video, -v  <filename>            Video filename, "random", "arc" for CURRENT_ARC,
-                                      "past_arc", or "cliamp" for the lofi radio
-    --rhythm, -r <rhythm>              "default" or "work-break" (e.g. "25-5")
-    --count, -c  <n>                   Number of pomodoros (default: from rhythm or 1)
-    --warmup, -w <secs>                Warm-up seconds (default: from rhythm or 0)
-    --audio, -a                        Play audio only (no video, uses mp3)
-
-Examples:
-    pomodoro --video "study.mp4"
-    pomodoro start --video "study.mp4"
-    pomodoro --video "study.mp4" -r "50-10" -c 4 -w 60
-    pomodoro --video "shinjuku.webm" --rhythm default
-    pomodoro --video random                         # random video + default rhythm
-    pomodoro --video random -r "50-10" -c 3        # random video, custom rhythm
-    pomodoro --video random --audio                 # random video, audio only
-    pomodoro --video "study.mp4" -a                # study.mp4, audio only
-    pomodoro --video arc                            # CURRENT_ARC soundtrack
-    pomodoro --video CURRENT_ARC -r "30-6" -c 2    # arc + custom rhythm
-    pomodoro startup                                  # ARC startup preset (10s gaps)
+Run ``pomodoro --help`` for the full usage (commands, flags, presets, chains).
 """
 
 import sys

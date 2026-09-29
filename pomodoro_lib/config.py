@@ -45,18 +45,17 @@ _SAY_TIME = (
     '[ -f "$F" ] || gtts-cli "The time is $(date '
     "'+%I:%M %p')\""
     ' --output "$F"; '
-    'mpv "$F" --volume=130 --no-terminal'
+    'mpv "$F" --no-terminal'
 )
-_PUSH_UPS_CMD = f"mpv {PUSH_UPS_FILE} --volume=130 --no-terminal"
+_PUSH_UPS_CMD = f"mpv {PUSH_UPS_FILE} --no-terminal"
 
 cmds = CommandsBuilder()
 
 if ANNOUNCE_TIME_ON_DONE:
     cmds.on("session_start").always(_PUSH_UPS_CMD)
     cmds.on("pomodoro_done").every(2).run(_PUSH_UPS_CMD)
-
-cmds.on("pomodoro_done").always(_SAY_TIME)
-cmds.on("session_start").once().run(_SAY_TIME)
+    cmds.on("pomodoro_done").always(_SAY_TIME)
+    cmds.on("session_start").once().run(_SAY_TIME)
 
 EVENT_COMMANDS = cmds.build()
 

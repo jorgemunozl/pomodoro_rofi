@@ -41,6 +41,7 @@ from pomodoro_lib.constants import (
     SKIP_RANDOM_FILE,
     SOUNDS_DIR,
     STATE_FILE,
+    TEST_PHASE_SECS,
     WORK_BELL_PLAYED,
 )
 from pomodoro_lib.rofi import (
@@ -105,9 +106,7 @@ def _status_line() -> str:
                 if MPV_SOCKET.exists():
                     subprocess.run(
                         ["socat", "-", str(MPV_SOCKET)],
-                        input=(
-                            '{"command": ["set_property", "pause", false]}\n'
-                        ),
+                        input=('{"command": ["set_property", "pause", false]}\n'),
                         capture_output=True,
                         text=True,
                         check=False,
@@ -176,8 +175,7 @@ def _status_line() -> str:
                 play_bell(BELL_30_FILE)
                 runner.run(
                     EVENT_BELL_30,
-                    session=state.current
-                    - 2,  # 0-based: break after session N
+                    session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -188,8 +186,7 @@ def _status_line() -> str:
                 play_bell(BELL_BEGIN_FILE)
                 runner.run(
                     EVENT_BELL_BEGIN,
-                    session=state.current
-                    - 2,  # 0-based: break after session N
+                    session=state.current - 2,  # 0-based: break after session N
                     total=state.total,
                 )
             except FileExistsError:
@@ -200,9 +197,7 @@ def _status_line() -> str:
         state.phase == "work"
         and not PAUSE_FILE.exists()
         and not (state.remaining_seconds > work_total)  # not in warm-up
-        and (
-            state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES
-        )
+        and (state.arc_mode or Path(state.video).name in INCLUDE_DURATION_FILES)
         and state.remaining_seconds <= 2
         and not WORK_BELL_PLAYED.exists()
     ):
@@ -499,9 +494,7 @@ def _list_videos() -> list[Path]:
     """List all video files in POMO_DIR."""
     if not POMO_DIR.is_dir():
         return []
-    return sorted(
-        f for f in POMO_DIR.iterdir() if f.suffix in (".mp4", ".webm")
-    )
+    return sorted(f for f in POMO_DIR.iterdir() if f.suffix in (".mp4", ".webm"))
 
 
 def _pick_random_video() -> Path | None:
@@ -654,9 +647,7 @@ def _ensure_cliamp_thumb() -> str:
         img.save(thumb, "JPEG")
         return str(thumb)
     except (ImportError, OSError) as exc:
-        _LOGGER.debug(
-            "Could not create the CLIAMP fallback thumbnail: %s", exc
-        )
+        _LOGGER.debug("Could not create the CLIAMP fallback thumbnail: %s", exc)
 
     return ""
 
@@ -1407,8 +1398,7 @@ def _handle_start(args: list[str]) -> None:
         "-r",
         default="default",
         help=(
-            'Rhythm: "default" to use the video\'s preset, or '
-            '"work-break" like "25-5"'
+            'Rhythm: "default" to use the video\'s preset, or "work-break" like "25-5"'
         ),
     )
     parser.add_argument(
@@ -1488,9 +1478,7 @@ def _handle_start(args: list[str]) -> None:
     # Look up video preset first (to get warm_up_secs regardless of mode)
     rhythm_data = _lookup_default_rhythm(video_name)
     if rhythm_data is not None:
-        _preset_work, _preset_break, _preset_total, warm_up_secs, schedule = (
-            rhythm_data
-        )
+        _preset_work, _preset_break, _preset_total, warm_up_secs, schedule = rhythm_data
 
     if parsed.rhythm and parsed.rhythm.lower() != "default":
         # User passed a custom rhythm like "25-5" or "50-10"
@@ -1596,37 +1584,53 @@ def _run_session_loop(ctrl: TimerController) -> bool:
         return True
 
 
-def _parse_from_option(extra: list[str]) -> int:
-    """Parse '--from N' (1-based schedule index) from trailing CLI args.
+def _parse_preset_flags(extra: list[str]) -> tuple[int, bool]:
+    """Parse '[--from N] [--test]' from trailing CLI args.
 
-    Returns 1 when the option is absent.
+    Returns (from_schedule, test). *from_schedule* is 1-based and defaults
+    to 1; *test* shrinks every phase to TEST_PHASE_SECS seconds.
     """
-    if not extra:
-        return 1
-    if len(extra) == 2 and extra[0] == "--from":
-        try:
-            n = int(extra[1])
-        except ValueError:
-            n = 0
-        if n < 1:
+    from_schedule = 1
+    test = False
+    i = 0
+    while i < len(extra):
+        arg = extra[i]
+        if arg == "--from" and i + 1 < len(extra):
+            try:
+                n = int(extra[i + 1])
+            except ValueError:
+                n = 0
+            if n < 1:
+                print(
+                    "Error: --from needs a positive schedule index (1-based).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            from_schedule = n
+            i += 2
+        elif arg == "--test":
+            test = True
+            i += 1
+        else:
             print(
-                "Error: --from needs a positive schedule index (1-based).",
+                "usage: pomodoro <preset> [--from N] [--test]",
                 file=sys.stderr,
             )
             sys.exit(1)
-        return n
-    print("usage: pomodoro <preset> [--from N]", file=sys.stderr)
-    sys.exit(1)
+    return from_schedule, test
 
 
 def _start_preset_session(
-    preset_name: str, from_schedule: int = 1
+    preset_name: str, from_schedule: int = 1, test: bool = False
 ) -> TimerController:
     """Start a startup preset session, optionally at a later schedule entry.
 
     *from_schedule* is 1-based: 1 = normal start, N = begin at the Nth
     schedule entry, skipping the earlier ones. The session counter, labels,
     and event commands keep their absolute numbers.
+
+    *test* replaces every phase with TEST_PHASE_SECS seconds and drops the
+    warm-up, so event commands can be checked quickly.
     """
     preset = STARTUP_PRESETS[preset_name]
 
@@ -1640,6 +1644,15 @@ def _start_preset_session(
             file=sys.stderr,
         )
         sys.exit(1)
+
+    if test:
+        # Every phase becomes TEST_PHASE_SECS seconds. Work phases get
+        # EXTRA_WORK_SECS added by the timer, so subtract it to land on the
+        # target; breaks use the plain value.
+        schedule = [
+            [(TEST_PHASE_SECS - EXTRA_WORK_SECS) / 60, TEST_PHASE_SECS / 60]
+            for _ in schedule
+        ]
 
     # Merge global EVENT_COMMANDS with the preset's own commands
     preset_runner = CommandRunner.merge(
@@ -1680,6 +1693,9 @@ def _start_preset_session(
         silence_secs = 0
         warm_up_secs = 0
 
+    if test:
+        warm_up_secs = 0  # no warm-up when testing commands
+
     ctrl.start(
         video=preset.start_dir or "",
         work_min=first_work,
@@ -1709,7 +1725,9 @@ def _start_preset_session(
         state.arc_switches = preset.switches
     state.save(STATE_FILE)
 
-    if from_schedule > 1:
+    if test:
+        print(f"\U0001f9ea {preset_name} [test]: every phase is {TEST_PHASE_SECS}s")
+    elif from_schedule > 1:
         print(
             f"\U0001f345 {preset_name} [{from_schedule}/{total}]: "
             f"{preset.description} (skipped {from_schedule - 1} earlier)"
@@ -1732,9 +1750,7 @@ def _start_video_session(video_name: str) -> TimerController:
 
     video_path = _resolve_video(video_name)
     if video_path is None:
-        raise FileNotFoundError(
-            f"Video '{video_name}' not found in {POMO_DIR}"
-        )
+        raise FileNotFoundError(f"Video '{video_name}' not found in {POMO_DIR}")
 
     ctrl = TimerController(cmd_runner=_cmd_runner)
 
@@ -1799,19 +1815,19 @@ def _handle_chain(name: str) -> None:
 
         interrupted = _run_session_loop(ctrl)
         if interrupted:
-            print(
-                f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}."
-            )
+            print(f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}.")
             return
 
     print(f"\n⛓  Chain '{name}' complete! \U0001f389")
 
 
-def _handle_startup_preset(name: str, from_schedule: int = 1) -> None:
+def _handle_startup_preset(
+    name: str, from_schedule: int = 1, test: bool = False
+) -> None:
     """Start a pre-configured startup pomodoro session.
 
     *from_schedule* (1-based) begins at a later schedule entry, skipping the
-    earlier ones.
+    earlier ones. *test* shrinks every phase to TEST_PHASE_SECS seconds.
     """
     if STATE_FILE.exists():
         print(
@@ -1820,7 +1836,7 @@ def _handle_startup_preset(name: str, from_schedule: int = 1) -> None:
         )
         sys.exit(1)
 
-    ctrl = _start_preset_session(name, from_schedule)
+    ctrl = _start_preset_session(name, from_schedule, test)
     _run_session_loop(ctrl)
 
 
@@ -1943,6 +1959,65 @@ def _handle_log() -> None:
         print("No command history yet.")
 
 
+def _handle_help() -> None:
+    """Print the full CLI usage."""
+    presets = "\n".join(f"    {name}" for name in STARTUP_PRESETS)
+    chains = "\n".join(f"    {name}" for name in CHAINS)
+    print(
+        f"""\
+Pomodoro timer — Rofi-powered with polybar integration.
+
+Usage:
+    pomodoro [command]
+
+Commands:
+    pomodoro                        Launch the rofi UI (thumbnail picker, or the
+                                    New session / Reset menu when one is running)
+    pomodoro status                 Print polybar status line
+    pomodoro toggle                 Pause/resume current session
+    pomodoro stop                   Stop current session
+    pomodoro next                   Skip to the next phase
+    pomodoro log                    Show today's command log
+    pomodoro random                 Play all videos randomly (background)
+    pomodoro skip_random            Skip to the next random video
+    pomodoro start [options]        Start a session with CLI arguments
+    pomodoro <preset> [--from N] [--test]
+                                    Run a startup preset; --from N starts at the
+                                    Nth schedule entry (1-based); --test makes
+                                    every phase 7s to check event commands
+    pomodoro <chain>                Run a chain of sessions back-to-back
+
+Flags:
+    -h, --help                      Show this help
+    -list, --list                   List video presets, arc sources, startup
+                                    presets, chains, and commands
+    --command <name>                Run a named command (see --list)
+
+Start options (start / direct flags):
+    --video, -v <value>             (required) video filename, "random", "arc",
+                                    "past_arc", or "cliamp"
+    --rhythm, -r <rhythm>           "default" or work-break (e.g. "25-5")
+    --count, -c <n>                 Number of pomodoros
+    --warmup, -w <secs>             Warm-up seconds
+    --audio, -a                     Play audio only (no video, uses mp3)
+
+Presets ({len(STARTUP_PRESETS)}) — run pomodoro --list for details:
+{presets}
+
+Chains ({len(CHAINS)}):
+{chains}
+
+Examples:
+    pomodoro                                  # UI: picker / session menu
+    pomodoro night --from 4                   # preset from its 4th entry
+    pomodoro --video random --rhythm 50-10 -c 4
+    pomodoro --video arc --audio
+    pomodoro --video cliamp                   # lofi radio
+    pomodoro --list
+    pomodoro --command nets"""
+    )
+
+
 def _handle_list() -> None:
     """Print the video presets, arc sources, startup presets, and chains."""
     # ── Video presets ──────────────────────────────────────────────────────
@@ -1974,17 +2049,13 @@ def _handle_list() -> None:
     print()
     print("📀 Special video sources (--video <value>)")
     arc_status = "✓" if ARC_SOUNDTRACK.exists() else "✗ missing"
-    print(
-        f"  {'arc / CURRENT_ARC':<20} ARC soundtrack  "
-        f"{ARC_SOUNDTRACK}  {arc_status}"
-    )
+    print(f"  {'arc / CURRENT_ARC':<20} ARC soundtrack  {ARC_SOUNDTRACK}  {arc_status}")
     past_status = "✓" if PAST_ARC_FILE.exists() else "✗ missing"
     print(
-        f"  {'past_arc / PAST_ARC':<20} music folder    "
-        f"{PAST_ARC_FILE}  {past_status}"
+        f"  {'past_arc / PAST_ARC':<20} music folder    {PAST_ARC_FILE}  {past_status}"
     )
     print(f"  {'cliamp / lofi':<20} CLIAMP lofi radio ({CLIAMP_LOFI_URL})")
-    print(f"  {'random':<20} random video from " f"{POMO_DIR}")
+    print(f"  {'random':<20} random video from {POMO_DIR}")
 
     # ── Startup presets ────────────────────────────────────────────────────
     print()
@@ -2046,13 +2117,13 @@ def _run_subcommand(args: list[str]) -> None:
     elif cmd == "skip_random":
         SKIP_RANDOM_FILE.touch()
     elif cmd in STARTUP_PRESETS:
-        _handle_startup_preset(cmd, _parse_from_option(args[1:]))
+        _handle_startup_preset(cmd, *_parse_preset_flags(args[1:]))
     elif cmd in CHAINS:
         _handle_chain(cmd)
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|random|log|"
-            "<chain>|<preset>}",
+            "usage: pomodoro {status|toggle|stop|next|start|log|random|"
+            "<preset>|<chain>}   (pomodoro --help for all options)",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -2062,33 +2133,32 @@ def _run_subcommand(args: list[str]) -> None:
 
 
 def _run_ui() -> None:
-    """Launch the rofi main menu and dispatch to handlers."""
+    """Launch the rofi UI.
+
+    With no session: go straight to the regular video picker (thumbnails).
+    With a session running: offer New session / Reset everything.
+    """
     ctrl = TimerController(cmd_runner=_cmd_runner)
 
     while True:
-        has_session = STATE_FILE.exists()
-
-        if has_session:
+        if STATE_FILE.exists():
             options = [
                 "▶  New session",
                 "🔄  Reset everything",
             ]
-        else:
-            options = [
-                "▶  New session",
-                "🔄  Reset everything",
-            ]
-
-        action = rofi_menu("Pomodoro", options, no_custom=True)
-        if action is None:
-            sys.exit(0)
-
-        if action.startswith("▶"):
-            if _handle_new_session(ctrl):
+            action = rofi_menu("Pomodoro", options, no_custom=True)
+            if action is None:
                 sys.exit(0)
-        elif action.startswith("🔄"):
-            ctrl.clear_state()
-            notify("🍅 Pomodoro", "All state cleared.")
+            if action.startswith("▶"):
+                if _handle_new_session(ctrl):
+                    sys.exit(0)
+            elif action.startswith("🔄"):
+                ctrl.clear_state()
+                notify("🍅 Pomodoro", "All state cleared.")
+        else:
+            # No session → the regular video picker with thumbnails
+            _handle_new_session(ctrl)
+            sys.exit(0)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────
@@ -2097,8 +2167,11 @@ def _run_ui() -> None:
 def main() -> None:
     args = sys.argv[1:]
     if args:
+        # -h / --help  →  full usage
+        if args[0] in ("-h", "--help", "help"):
+            _handle_help()
         # -log / --log  →  show today's command log
-        if args[0] in ("-log", "--log"):
+        elif args[0] in ("-log", "--log"):
             _handle_log()
         # -list / --list  →  show video presets
         elif args[0] in ("-list", "--list"):
