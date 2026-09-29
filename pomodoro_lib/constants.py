@@ -4,6 +4,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from pomodoro_lib.commands import (
+    EVENT_BREAK_DONE,
+    EVENT_POMODORO_BEGIN,
+    EVENT_POMODORO_DONE,
+    EVENT_SESSION_START,
+)
+
 ScheduleEntry = (
     tuple[list, tuple[str, str]] | tuple[list, tuple[str, str], tuple[str, str] | None]
 )
@@ -115,13 +122,15 @@ open_network = (
     'exec /usr/bin/obsidian "obsidian://open?vault=networking"'
 )
 
+mlpdft_workspace = 'i3-msg "workspace --no-auto-back-and-forth 4:💻" && zed ~/project/mlpdft && i3-msg "workspace --no-auto-back-and-forth 2:🟣" && /usr/bin/obsidian "obsidian://open?vault=social&file=project-notes%2Fmlpdft" & i3-msg "workspace --no-auto-back-and-forth 2:🟣" && /usr/bin/obsidian "obsidian://open?vault=second-brain&file=project-notes%2Fmlpdft"'
+
 core_tasks = 'i3-msg "workspace --no-auto-back-and-forth 2:🟣" && /usr/bin/obsidian "obsidian://open?vault=social&file=permanent-notes%2Fmlpdft Core task to advance at light speed"'
 
 metrics = "python ~/project/metrics/metrics_server.py & firefox http://127.0.0.1:8000"
 
 applications = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fapplications"'
 
-budget = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fmoney-managment"'
+budget = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=project-notes%2Fmoney-management"'
 
 open_chess = (
     'i3-msg "workspace --no-auto-back-and-forth 3:🌐" && '
@@ -161,6 +170,8 @@ saturday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsid
 
 sunday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
 
+open_week = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian obsidian://adv-uri?vault=personal&commandid=periodic-notes%3Aopen-weekly-note'
+
 current_day = datetime.now().astimezone().day
 
 
@@ -171,6 +182,7 @@ def return_day_of_week() -> str:
 
 open_journal_work = str(eval(return_day_of_week()))
 
+countdown = "firefox /home/jorge/dotfiles/warmup-ritual/led-countdown.html & mpv --input-ipc-server=/tmp/mpvsocket --no-video /home/jorge/Videos/tired/kamado.webm"
 shutdown_command = "python3 /home/jorge/dotfiles/alarm/alarm.py"
 
 calendly = (
@@ -210,7 +222,7 @@ COMMANDS: dict[str, str] = {
     name: globals()[name]
     for name in (
         "tabbed",
-        "journal",
+        "open_journal_work",
         "open_zk",
         "open_personal",
         "open_social",
@@ -325,10 +337,14 @@ NOTIFY_COLORS: dict[str, str] = {
 STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "morning_ritual_spring_thinker": StartupPreset(
         [
-            ([4, 1], ("clean myself", "set up"), (open_uta, "open uta break")),
-            ([15, 5], ("first", "nets time"), (nets, "nets break")),
-            ([16, 1], ("second", "break"), (nets, "nets break")),
-            ([16, 1], ("third", "it's over"), (nets, "nets break")),
+            (
+                [4, 1],
+                ("clean myself", "set up"),
+                (f"{countdown} && {mlpdft_workspace}", EVENT_SESSION_START),
+            ),
+            ([15, 5], ("first", "nets time"), (nets, EVENT_POMODORO_DONE)),
+            ([16, 1], ("second", "break")),
+            ([16, 1], ("third", "it's over")),
         ],
         str(ARC_SOUNDTRACK),
         "one hour morning, at cec, from seven to eigth",
@@ -348,13 +364,13 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             (
                 [11, 2],
                 ("spaced repetition session one", "spaced repetition break"),
-                (open_zk, "pomodoro_done"),
+                (open_zk, EVENT_SESSION_START),
             ),
             ([11, 2], ("spaced repetition session two", "spaced repetition break")),
             (
                 [11, 2],
                 ("spaced repetition session three", "spaced repetition break"),
-                (open_personal, "pomodoro_done"),
+                (open_personal, EVENT_BREAK_DONE),
             ),
             ([6, 2], ("predict the future work", "personal prepared")),
             ([8, 0], ("personal read", "")),
@@ -376,7 +392,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         [
             ([11, 10], ("greet", "science")),
             ([8, 5], ("special", "break")),
-            ([22, 2], ("chess", "goodbye")),
+            ([22, 2], ("chess", "goodbye"), (open_chess, EVENT_POMODORO_BEGIN)),
         ],
         str(None),
         "Monday and thursday call to Jeff",
@@ -398,18 +414,27 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     ),
     "night_ritual_spring_thinker": StartupPreset(
         [
-            ([15, 1], ("applications", "phase"), (applications, "pomodoro_done")),
-            ([8, 6], ("core task time", "tidy"), (core_tasks, "pomodoro_done")),
-            ([8, 1], ("review arc", "phase"), (current_arc, "pomodoro_done")),
-            ([8, 1], ("budget", "phase"), (budget, "pomodoro_done")),
-            ([2, 6], ("log metrics", "break 6 min"), (metrics, "pomodoro_done")),
+            ([15, 1], ("applications", "phase"), (applications, EVENT_SESSION_START)),
+            ([8, 6], ("core task time", "tidy"), (core_tasks, EVENT_POMODORO_BEGIN)),
+            ([8, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
+            ([8, 1], ("budget", "phase"), (budget, EVENT_POMODORO_BEGIN)),
+            ([2, 6], ("log metrics", "break 6 min"), (metrics, EVENT_POMODORO_BEGIN)),
             (
-                [8, 7],
-                ("journal/work", "journal/day"),
-                (open_journal_work, "pomodoro_done"),
+                [7, 1],
+                ("journal/work", "phase"),
+                (open_journal_work, EVENT_POMODORO_BEGIN),
             ),
-            ([7, 3], ("reflect a note", "tidy"), ("", "pomodoro_done")),
-            ([4, 1], ("going to sleep", "turn off"), ("", "pomodoro_done")),
+            (
+                [6, 1],
+                ("journal/day", "phase"),
+                (open_week, EVENT_POMODORO_BEGIN),
+            ),
+            ([7, 3], ("reflect a note", "tidy")),
+            (
+                [4, 1],
+                ("going to sleep", "turn off"),
+                (shutdown_command, "pomodoro_done"),
+            ),
         ],  # 87
         str(ARC_SOUNDTRACK),
         "spring night begin at eight",
