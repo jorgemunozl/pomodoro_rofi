@@ -170,7 +170,7 @@ saturday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsid
 
 sunday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
 
-open_week = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian obsidian://adv-uri?vault=personal&commandid=periodic-notes%3Aopen-weekly-note'
+open_week = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://adv-uri?vault=personal&commandid=periodic-notes%3Aopen-weekly-note"'
 
 current_day = datetime.now().astimezone().day
 
@@ -183,7 +183,10 @@ def return_day_of_week() -> str:
 open_journal_work = str(eval(return_day_of_week()))
 
 countdown = "firefox /home/jorge/dotfiles/warmup-ritual/led-countdown.html & mpv --input-ipc-server=/tmp/mpvsocket --no-video /home/jorge/Videos/tired/kamado.webm"
+
 shutdown_command = "python3 /home/jorge/dotfiles/alarm/alarm.py"
+turn_off_command = "python3 ~/dotfiles/alarm/turn_off.py"
+
 
 calendly = (
     'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
@@ -226,6 +229,7 @@ COMMANDS: dict[str, str] = {
         "open_zk",
         "open_personal",
         "open_social",
+        "open_week",
         "open_network",
         "open_chess",
         "open_git",
@@ -433,7 +437,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             (
                 [4, 1],
                 ("going to sleep", "turn off"),
-                (shutdown_command, "pomodoro_done"),
+                (turn_off_command, "pomodoro_done"),
             ),
         ],  # 87
         str(ARC_SOUNDTRACK),
