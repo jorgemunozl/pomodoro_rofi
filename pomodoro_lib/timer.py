@@ -574,6 +574,7 @@ class TimerController:
         audio_only: bool = False,
         arc_mode: bool = False,
         cliamp_mode: bool = False,
+        continuous_audio: bool = False,
         silence_secs: int = ARC_SILENCE_SECONDS,
         notify_color: str = "default",
         notify_title: str = "",
@@ -602,6 +603,7 @@ class TimerController:
             audio_only=audio_only,
             arc_mode=arc_mode,
             cliamp_mode=cliamp_mode,
+            continuous_audio=continuous_audio,
             notify_color=notify_color,
             notify_title=notify_title,
             notify_desc=notify_desc,
@@ -830,9 +832,11 @@ class TimerController:
     def _pause_on_break(self) -> bool:
         """Whether to pause video/audio during breaks.
 
-        True for ARC mode, CLIAMP mode, or videos listed in
-        INCLUDE_DURATION_FILES.
+        False for continuous audio (e.g. a lofi preset). Otherwise True for
+        ARC mode, CLIAMP mode, or videos listed in INCLUDE_DURATION_FILES.
         """
+        if self.state.continuous_audio:
+            return False
         if self.state.arc_mode or self.state.cliamp_mode:
             return True
         video_name = Path(self.state.video).name

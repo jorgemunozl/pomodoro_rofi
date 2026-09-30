@@ -24,6 +24,7 @@ from pomodoro_lib.constants import (
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
     CLIAMP_LOFI_URL,
+    CLIAMP_PLAYLIST,
     CMD_LOG_FILE,
     COMMANDS,
     COUNT_OPTIONS,
@@ -1667,11 +1668,22 @@ def _start_preset_session(
     first_work, first_break = schedule[from_schedule - 1]
 
     # ── Determine start mode from start_dir ────────────────────────────────
+    # "lofi"    → CLIAMP lofi radio, playing uninterrupted (never paused)
     # Directory → arc_mode (build shuffled playlist from directory contents)
     # File      → audio_only (play a single video's audio track)
+    cliamp_mode = False
+    continuous_audio = False
     start_path = Path(preset.start_dir) if preset.start_dir else None
 
-    if start_path is not None and start_path.is_dir():
+    if preset.start_dir == CLIAMP_PLAYLIST:
+        # CLIAMP lofi radio, played straight through all phases
+        arc_mode = False
+        audio_only = False
+        cliamp_mode = True
+        continuous_audio = True
+        silence_secs = 0
+        warm_up_secs = 0
+    elif start_path is not None and start_path.is_dir():
         arc_mode = True
         audio_only = True
         silence_secs = preset.silence_secs
@@ -1706,6 +1718,8 @@ def _start_preset_session(
         schedule_labels=phase_labels,
         audio_only=audio_only,
         arc_mode=arc_mode,
+        cliamp_mode=cliamp_mode,
+        continuous_audio=continuous_audio,
         silence_secs=silence_secs,
         notify_color=preset.notify_color,
         notify_title=preset.notify_title,

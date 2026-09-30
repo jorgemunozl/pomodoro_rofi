@@ -45,7 +45,7 @@ class StartupPreset:
     """Preset schedule entries hold timing, phase labels, and optional event command."""
 
     schedule: list[ScheduleEntry] = field(default_factory=list)
-    start_dir: str | None = None
+    start_dir: str | None = None  # ARC dir, video path, or "lofi" (CLIAMP)
     description: str = ""
     switches: list = field(default_factory=list, kw_only=True)
     silence_secs: int = field(default=ARC_SILENCE_SECONDS, kw_only=True)
@@ -213,6 +213,8 @@ nets = (
 )
 
 CLIAMP_LOFI_URL = "http://radio.cliamp.stream/lofi/stream"
+# Playlist cliamp loads for the lofi radio. Also used as the sentinel for a
+# StartupPreset whose ``start_dir == "lofi"`` (uninterrupted lofi audio).
 CLIAMP_PLAYLIST = "lofi"
 
 cliamp_start = "cliamp --daemon"
@@ -344,13 +346,13 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             (
                 [4, 1],
                 ("clean myself", "set up"),
-                (f"{countdown} && {mlpdft_workspace}", EVENT_SESSION_START),
+                (mlpdft_workspace, EVENT_SESSION_START),
             ),
             ([15, 5], ("first", "nets time"), (nets, EVENT_POMODORO_DONE)),
             ([16, 1], ("second", "break")),
             ([16, 1], ("third", "it's over")),
         ],
-        str(ARC_SOUNDTRACK),
+        "lofi",
         "one hour morning, at cec, from seven to eigth",
     ),
     "morning_bus_spring_thinker": StartupPreset(
