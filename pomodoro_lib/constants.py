@@ -158,11 +158,11 @@ open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
 monday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Mondays are about assist to classes and talk with Jeff"'
 
-thursday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays is for advance the MACE paper and classical mechanics duty"'
+tuesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays is for advance the MACE paper and classical mechanics duty"'
 
 wednesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Wednesdays is about assist to classes and advance MACE paper"'
 
-tuesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays are about advance MACE paper at the morning and mathematical methods exam"'
+thursday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays are about advance MACE paper at the morning and mathematical methods exam"'
 
 friday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"'
 
@@ -344,13 +344,17 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "morning_ritual_spring_thinker": StartupPreset(
         [
             (
-                [4, 1],
+                [3, 1],
                 ("clean myself", "set up"),
                 (mlpdft_workspace, EVENT_SESSION_START),
             ),
-            ([15, 5], ("first", "nets time"), (nets, EVENT_POMODORO_DONE)),
-            ([16, 1], ("second", "break")),
-            ([16, 1], ("third", "it's over")),
+            ([15, 5], ("first morning work", "first phase")),
+            ([16, 1], ("second morning work", "second phase")),
+            (
+                [16, 1],
+                ("third morning work", "nets phase"),
+                (nets, EVENT_POMODORO_DONE),
+            ),
         ],
         "lofi",
         "one hour morning, at cec, from seven to eigth",
@@ -369,17 +373,28 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         [
             (
                 [11, 2],
-                ("spaced repetition session one", "spaced repetition break"),
+                ("spaced repetition session one", "spaced repetition phase"),
                 (open_zk, EVENT_SESSION_START),
             ),
-            ([11, 2], ("spaced repetition session two", "spaced repetition break")),
+            ([11, 2], ("spaced repetition session two", "spaced repetition phase")),
             (
                 [11, 2],
-                ("spaced repetition session three", "spaced repetition break"),
+                (
+                    "spaced repetition session three",
+                    "spaced repetition phase|personal",
+                ),
                 (open_personal, EVENT_BREAK_DONE),
             ),
-            ([6, 2], ("predict the future work", "personal prepared")),
-            ([8, 0], ("personal read", "")),
+            (
+                [8, 1],
+                ("personal read", "phase to predict"),
+                (open_journal_work, EVENT_BREAK_DONE),
+            ),
+            (
+                [6, 2],
+                ("predict the future work", "personal prepared"),
+                (mlpdft_workspace, EVENT_BREAK_DONE),
+            ),
         ],
         str(ARC_SOUNDTRACKS_PAST),
         "after nap, pray already did it,1:05 to 2",
@@ -421,7 +436,6 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "night_ritual_spring_thinker": StartupPreset(
         [
             ([15, 1], ("applications", "phase"), (applications, EVENT_SESSION_START)),
-            ([8, 6], ("core task time", "tidy"), (core_tasks, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("budget", "phase"), (budget, EVENT_POMODORO_BEGIN)),
             ([2, 6], ("log metrics", "break 6 min"), (metrics, EVENT_POMODORO_BEGIN)),
@@ -436,6 +450,11 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 (open_week, EVENT_POMODORO_BEGIN),
             ),
             ([7, 3], ("reflect a note", "tidy")),
+            (
+                [8, 6],
+                ("plan morning ritual", "tidy"),
+                (core_tasks, EVENT_POMODORO_BEGIN),
+            ),
             (
                 [4, 1],
                 ("going to sleep", "turn off"),
