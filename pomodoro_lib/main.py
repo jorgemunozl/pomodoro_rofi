@@ -173,7 +173,8 @@ def _status_line() -> str:
         if rem <= 30 and not BELL_30_PLAYED.exists():
             try:
                 BELL_30_PLAYED.touch(exist_ok=False)
-                play_bell(BELL_30_FILE)
+                if state.bell:
+                    play_bell(BELL_30_FILE)
                 runner.run(
                     EVENT_BELL_30,
                     session=state.current - 2,  # 0-based: break after session N
@@ -184,7 +185,8 @@ def _status_line() -> str:
         if rem <= 3 and not BELL_BEGIN_PLAYED.exists():
             try:
                 BELL_BEGIN_PLAYED.touch(exist_ok=False)
-                play_bell(BELL_BEGIN_FILE)
+                if state.bell:
+                    play_bell(BELL_BEGIN_FILE)
                 runner.run(
                     EVENT_BELL_BEGIN,
                     session=state.current - 2,  # 0-based: break after session N
@@ -204,7 +206,8 @@ def _status_line() -> str:
     ):
         try:
             WORK_BELL_PLAYED.touch(exist_ok=False)
-            play_bell(BELL_END_FILE)
+            if state.bell:
+                play_bell(BELL_END_FILE)
             runner.run(
                 EVENT_BELL_END,
                 session=state.current - 1,  # 0-based: work session N
@@ -1728,6 +1731,7 @@ def _start_preset_session(
         notify_phases=preset.notify_phases or {},
         say_label=preset.say_label,
         say_dir=str(SOUNDS_DIR / preset_name) if preset.say_label else "",
+        bell=preset.bell,
         start_session=from_schedule,
     )
 

@@ -56,6 +56,7 @@ class StartupPreset:
     notify_timeout: int = field(default=0, kw_only=True)
     notify_phases: dict | None = field(default=None, kw_only=True)
     say_label: bool = field(default=True, kw_only=True)
+    bell: bool = field(default=False, kw_only=True)  # play bell sounds
 
     @property
     def timing_schedule(self) -> list[list]:

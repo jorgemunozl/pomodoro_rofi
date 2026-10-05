@@ -20,6 +20,7 @@ class PomodoroState:
     arc_mode: bool = False  # playlist from ARC_SOUNDTRACK with silence gaps
     cliamp_mode: bool = False  # audio via the CLIAMP daemon (lofi radio) instead of mpv
     continuous_audio: bool = False  # keep audio playing through breaks (never pause)
+    bell: bool = True  # play bell sounds (presets default to off)
     schedule: list = field(
         default_factory=list
     )  # [[work, break], ...] per pomodoro, empty if uniform
