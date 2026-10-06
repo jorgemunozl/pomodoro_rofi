@@ -209,9 +209,12 @@ open_huggingface = (
 slack = "slack"
 nchat = "alacritty -e nchat"
 nets = (
-    f"{tabbed}; {open_gmail} & {open_huggingface} & {open_git} & "
+    f"{open_gmail} & {tabbed} & {open_huggingface} & {open_git} & "
     f"{open_gmail_uni} & {slack} & {nchat} & {open_terminal_riced}"
 )
+
+ligth_nets = f"{open_gmail} & {tabbed} & {open_gmail_uni} & {nchat}"
+
 
 CLIAMP_LOFI_URL = "http://radio.cliamp.stream/lofi/stream"
 # Playlist cliamp loads for the lofi radio. Also used as the sentinel for a
@@ -354,7 +357,6 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             (
                 [16, 1],
                 ("third morning work", "nets phase"),
-                (nets, EVENT_POMODORO_DONE),
             ),
         ],
         "lofi",
@@ -437,7 +439,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "night_ritual_spring_thinker": StartupPreset(
         [
             ([15, 1], ("applications", "phase"), (applications, EVENT_SESSION_START)),
-            ([8, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
+            ([9, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("budget", "phase"), (budget, EVENT_POMODORO_BEGIN)),
             ([2, 6], ("log metrics", "break 6 min"), (metrics, EVENT_POMODORO_BEGIN)),
             (
@@ -457,9 +459,9 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 (core_tasks, EVENT_POMODORO_BEGIN),
             ),
             (
-                [4, 1],
+                [3, 1],
                 ("going to sleep", "turn off"),
-                (turn_off_command, "pomodoro_done"),
+                (f"{ligth_nets} & sleep 120; {turn_off_command}", "pomodoro_done"),
             ),
         ],  # 87
         str(ARC_SOUNDTRACK),
