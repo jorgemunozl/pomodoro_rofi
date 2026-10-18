@@ -423,18 +423,12 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     ),
     "night_fast_ritual_spring_thinker": StartupPreset(
         [
-            ([8, 0], ("core tasks", ""), (core_tasks, "pomodoro_done")),
-            ([8, 0], ("applications", ""), (applications, "pomodoro_done")),
-            ([1, 0], ("log metrics", ""), (metrics, "pomodoro_done")),
-            (
-                [7, 6],
-                ("journal/work", "journal/day"),
-                (open_journal_work, "pomodoro_done"),
-            ),
-            ([6, 4], ("reflect a note", "tidy")),
+            ([8, 1], ("journal work", "phase"), (open_journal_work, "pomodoro_done"),),
+            ([7, 1], ("journal day", "phase"), (open_week, "pomodoro_done"),),
+            ([8, 4], ("reflect a note", "tidy"), (f"sleep 80;{turn_off_command}", "pomodoro_done"),),
         ],
         str(ARC_SOUNDTRACK),
-        "40 min, fast version of night ritual",
+        "30 min, fast version of night ritual",
     ),
     "night_ritual_spring_thinker": StartupPreset(
         [
