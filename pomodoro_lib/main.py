@@ -39,6 +39,7 @@ from pomodoro_lib.constants import (
     PAUSE_TS,
     POMO_DIR,
     POMODORO_DEFAULTS,
+    print_preset_times,
     SKIP_RANDOM_FILE,
     SOUNDS_DIR,
     STATE_FILE,
@@ -2009,6 +2010,8 @@ Flags:
     -h, --help                      Show this help
     -list, --list                   List video presets, arc sources, startup
                                     presets, chains, and commands
+    --preset-time                   Print total work and break time for each
+                                    startup preset
     --command <name>                Run a named command (see --list)
 
 Start options (start / direct flags):
@@ -2194,6 +2197,8 @@ def main() -> None:
         # -list / --list  →  show video presets
         elif args[0] in ("-list", "--list"):
             _handle_list()
+        elif args[0] in ("--preset-time", "--preset_time"):
+            print_preset_times()
         # --command <name>  →  run a named command
         elif args[0] in ("--command", "-command"):
             if len(args) < 2:

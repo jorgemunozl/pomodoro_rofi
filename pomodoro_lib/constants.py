@@ -414,8 +414,9 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     ),
     "night_jeff_spring_thinker": StartupPreset(
         [
-            ([11, 10], ("greet", "science")),
-            ([8, 5], ("special", "break")),
+            ([10, 1], ("greet", "phase")),
+            ([10,1], ("science", "phase")),
+            ([8, 5], ("special", "phase")),
             ([22, 2], ("chess", "goodbye"), (open_chess, EVENT_POMODORO_BEGIN)),
         ],
         str(None),
