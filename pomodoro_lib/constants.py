@@ -1,7 +1,7 @@
 # flake8: noqa
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from pomodoro_lib.commands import (
@@ -157,19 +157,121 @@ open_mine = 'pomodoro --video "mine_2025_II.webm"'
 open_shinjuku_2 = 'pomodoro --video "shinjuku2.mp4"'
 open_tired = "/home/jorge/dotfiles/tired/tired.sh"
 
-monday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Mondays are about assist to classes and talk with Jeff"'
+# ── Day-of-week journal notes ───────────────────────────────────────────────
+# Study week 1 is the week (Mon-Sun) containing this date. The week number is
+# derived from today's date at import, so nothing needs bumping weekly.
+SEMESTER_WEEK_ONE = date(2026, 8, 31)  # Monday of the week of Sep 3, 2026
 
-tuesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Tuesdays is for advance the MACE paper and classical mechanics duty"'
 
-wednesday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Wednesdays is about assist to classes and advance MACE paper"'
+def current_study_week(today: date | None = None) -> int:
+    """Return the 1-based study week for *today* (defaults to today's date)."""
+    day = today or datetime.now().astimezone().date()
+    return max(1, (day - SEMESTER_WEEK_ONE).days // 7 + 1)
 
-thursday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Thursdays are about advance MACE paper at the morning and mathematical methods exam"'
 
-friday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2FInfinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"'
+current_week = current_study_week()
 
-saturday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker saturdays i go to the library to advance the paper and prepare ourselves for the sunday at night"'
+_ORDINAL_ONES = {
+    1: "First",
+    2: "Second",
+    3: "Third",
+    4: "Fourth",
+    5: "Fifth",
+    6: "Sixth",
+    7: "Seventh",
+    8: "Eighth",
+    9: "Ninth",
+}
+_ORDINAL_TEENS = {
+    10: "Tenth",
+    11: "Eleventh",
+    12: "Twelfth",
+    13: "Thirteenth",
+    14: "Fourteenth",
+    15: "Fifteenth",
+    16: "Sixteenth",
+    17: "Seventeenth",
+    18: "Eighteenth",
+    19: "Nineteenth",
+}
+_ORDINAL_TENS = {
+    2: "Twenty",
+    3: "Thirty",
+    4: "Forty",
+    5: "Fifty",
+    6: "Sixty",
+    7: "Seventy",
+    8: "Eighty",
+    9: "Ninety",
+}
+_ORDINAL_TENS_EXACT = {
+    2: "Twentieth",
+    3: "Thirtieth",
+    4: "Fortieth",
+    5: "Fiftieth",
+    6: "Sixtieth",
+    7: "Seventieth",
+    8: "Eightieth",
+    9: "Ninetieth",
+}
 
-sunday = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://open?vault=personal&file=permanent-notes%2finfinite thinker sundays are about do trivial task try hard and reset the week"'
+
+def ordinal_word(n: int) -> str:
+    """Return the capitalized ordinal word for n (1 -> 'First', 8 -> 'Eighth')."""
+    if n < 1:
+        raise ValueError(f"ordinal needs a positive number, got {n}")
+    if n < 10:
+        return _ORDINAL_ONES[n]
+    if n < 20:
+        return _ORDINAL_TEENS[n]
+    tens, ones = divmod(n, 10)
+    if tens not in _ORDINAL_TENS:
+        raise ValueError(f"ordinal too large: {n}")
+    if ones == 0:
+        return _ORDINAL_TENS_EXACT[tens]
+    return f"{_ORDINAL_TENS[tens]}-{_ORDINAL_ONES[ones]}"
+
+
+# Heading inside every day note for the current week, e.g. "Eighth%20Week".
+WEEK_HEADING = f"{ordinal_word(current_week)}%20Week"
+
+
+def _day_command(note: str) -> str:
+    """Open a day note at the current week's heading (Advanced URI)."""
+    return (
+        'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+        '/usr/bin/obsidian "obsidian://adv-uri?vault=personal'
+        f'&filename={note}&heading={WEEK_HEADING}"'
+    )
+
+
+monday = _day_command(
+    "Infinite Thinker Mondays are about assist to classes and talk with Jeff"
+)
+
+tuesday = _day_command(
+    "Infinite Thinker Tuesdays is for advance the MACE paper and classical mechanics duty"
+)
+
+wednesday = _day_command(
+    "Infinite Thinker Wednesdays is about assist to classes and advance MACE paper"
+)
+
+thursday = _day_command(
+    "Infinite Thinker Thursdays are about advance MACE paper at the morning and mathematical methods exam"
+)
+
+friday = _day_command(
+    "Infinite Thinker Fridays is about classes morning and modern exam or advance with the thesis, cooking something for tomorrow morning"
+)
+
+saturday = _day_command(
+    "infinite thinker saturdays i go to the library to advance the paper and prepare ourselves for the sunday at night"
+)
+
+sunday = _day_command(
+    "infinite thinker sundays are about do trivial task try hard and reset the week"
+)
 
 open_week = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://adv-uri?vault=personal&commandid=periodic-notes%3Aopen-weekly-note"'
 
