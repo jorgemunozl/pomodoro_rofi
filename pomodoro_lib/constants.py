@@ -35,6 +35,7 @@ BELL_END_FILE = SOUNDS_DIR / "bell_end.mp3"
 PUSH_UPS_FILE = SOUNDS_DIR / "push_ups.mp3"
 
 ARC_SOUNDTRACK = Path.home() / "Videos" / "current-arc"
+ARC_ENERGYZING = ARC_SOUNDTRACK / "energyzing"  # energized subset
 ARC_CLEANING = Path.home() / "Videos" / "workout" / "rollouts" / "cleaning"
 ARC_SILENCE_SECONDS = 240  # seconds of silence between arc tracks
 ARC_STARTUP = 10  # shorter silence for the startup preset
@@ -82,6 +83,7 @@ class StartupPreset:
 
 
 ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
+ARC_ENERGYZING_PAST = ARC_SOUNDTRACKS_PAST / "energyzing"  # energized subset
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
@@ -279,7 +281,7 @@ _iso_year, _iso_week, _ = _open_week_date.isocalendar()
 open_week = (
     'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
     '/usr/bin/obsidian "obsidian://adv-uri?vault=personal'
-    f'&filename={_iso_year}-W{_iso_week:02d}'
+    f"&filename={_iso_year}-W{_iso_week:02d}"
     f'&heading={_open_week_date.strftime("%A")}"'
 )
 
@@ -482,8 +484,9 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 ("third morning work", "nets phase"),
             ),
         ],
-        "lofi",
+        str(ARC_ENERGYZING),
         "one hour morning, at cec, from seven to eigth",
+        silence_secs=15,
     ),
     "morning_bus_spring_thinker": StartupPreset(
         [
@@ -498,11 +501,20 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "noon_ritual_spring_thinker": StartupPreset(
         [
             (
+                [6, 2],
+                ("journal what I learned in the morning", "phase"),
+                (open_journal_work, EVENT_SESSION_START),
+            ),
+            (
                 [11, 2],
                 ("spaced repetition session one", "spaced repetition phase"),
-                (open_zk, EVENT_SESSION_START),
+                (open_zk, EVENT_POMODORO_BEGIN),
             ),
-            ([11, 2], ("spaced repetition session two", "spaced repetition phase")),
+            (
+                [11, 2],
+                ("spaced repetition session two", "spaced repetition phase"),
+                (open_zk, EVENT_POMODORO_BEGIN),
+            ),
             (
                 [11, 2],
                 (
@@ -513,17 +525,13 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             ),
             (
                 [8, 1],
-                ("personal read", "phase to predict"),
-                (open_journal_work, EVENT_BREAK_DONE),
-            ),
-            (
-                [6, 2],
-                ("predict the future work", "personal prepared"),
-                (mlpdft_workspace, EVENT_BREAK_DONE),
+                ("personal read", "phase to end"),
+                (open_personal, EVENT_BREAK_DONE),
             ),
         ],
-        str(ARC_SOUNDTRACKS_PAST),
+        str(ARC_ENERGYZING_PAST),
         "after nap, pray already did it,1:05 to 2",
+        silence_secs=15,
     ),
     "afternoon_bus_spring_thinker": StartupPreset(
         [
@@ -538,7 +546,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "night_jeff_spring_thinker": StartupPreset(
         [
             ([10, 1], ("greet", "phase")),
-            ([10,1], ("science", "phase")),
+            ([10, 1], ("science", "phase")),
             ([8, 5], ("special", "phase")),
             ([22, 2], ("chess", "goodbye"), (open_chess, EVENT_POMODORO_BEGIN)),
         ],
@@ -547,10 +555,18 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     ),
     "night_fast_ritual_spring_thinker": StartupPreset(
         [
-            ([8, 1], ("journal work", "phase"), (open_journal_work, EVENT_POMODORO_BEGIN)),
+            (
+                [8, 1],
+                ("journal work", "phase"),
+                (open_journal_work, EVENT_POMODORO_BEGIN),
+            ),
             ([7, 1], ("journal day", "phase"), (open_week, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("reflect a note", "phase"), (reflect, EVENT_POMODORO_BEGIN)),
-            ([1, 0], ("going to sleep",""),(f"sleep 80;{turn_off_command}", "pomodoro_done")),
+            (
+                [1, 0],
+                ("going to sleep", ""),
+                (f"sleep 80;{turn_off_command}", "pomodoro_done"),
+            ),
         ],
         str(ARC_SOUNDTRACK),
         "30 min, fast version of night ritual",
@@ -560,7 +576,10 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             ([15, 1], ("applications", "phase"), (applications, EVENT_SESSION_START)),
             ([9, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("budget", "phase"), (budget, EVENT_POMODORO_BEGIN)),
-            ([2, 6], ("log metrics", "break 6 min")), # (metrics, EVENT_POMODORO_BEGIN)),
+            (
+                [2, 6],
+                ("log metrics", "break 6 min"),
+            ),  # (metrics, EVENT_POMODORO_BEGIN)),
             (
                 [7, 1],
                 ("journal/work", "phase"),
