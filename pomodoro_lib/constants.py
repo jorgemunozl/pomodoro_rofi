@@ -175,24 +175,24 @@ _ORDINAL_ONES = {
     1: "First",
     2: "Second",
     3: "Third",
-    4: "Fourth",
-    5: "Fifth",
-    6: "Sixth",
-    7: "Seventh",
-    8: "Eighth",
-    9: "Ninth",
+    4: "Four",
+    5: "Five",
+    6: "Six",
+    7: "Seven",
+    8: "Eight",
+    9: "Nine",
 }
 _ORDINAL_TEENS = {
-    10: "Tenth",
-    11: "Eleventh",
-    12: "Twelfth",
-    13: "Thirteenth",
-    14: "Fourteenth",
-    15: "Fifteenth",
-    16: "Sixteenth",
-    17: "Seventeenth",
-    18: "Eighteenth",
-    19: "Nineteenth",
+    10: "Ten",
+    11: "Eleven",
+    12: "Twelve",
+    13: "Thirteen",
+    14: "Fourteen",
+    15: "Five teen",
+    16: "Sixteen",
+    17: "Seventeen",
+    18: "Eighteen",
+    19: "Nineteen",
 }
 _ORDINAL_TENS = {
     2: "Twenty",
@@ -233,7 +233,7 @@ def ordinal_word(n: int) -> str:
 
 
 # Heading inside every day note for the current week, e.g. "Eighth%20Week".
-WEEK_HEADING = f"{ordinal_word(current_week)}%20Week"
+WEEK_HEADING = f"{ordinal_word(current_week)}%20week"
 
 
 def _day_command(note: str) -> str:
@@ -258,7 +258,7 @@ wednesday = _day_command(
 )
 
 thursday = _day_command(
-    "Infinite Thinker Thursdays are about advance MACE paper at the morning and mathematical methods exam"
+    "Infinite Thinker Thursdays is about advance MACE paper at the morning and mathematical methods exam"
 )
 
 friday = _day_command(
@@ -273,7 +273,21 @@ sunday = _day_command(
     "infinite thinker sundays are about do trivial task try hard and reset the week"
 )
 
-open_week = 'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && /usr/bin/obsidian "obsidian://adv-uri?vault=personal&commandid=periodic-notes%3Aopen-weekly-note"'
+_open_week_date = datetime.now().astimezone()
+_iso_year, _iso_week, _ = _open_week_date.isocalendar()
+
+open_week = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    '/usr/bin/obsidian "obsidian://adv-uri?vault=personal'
+    f'&filename={_iso_year}-W{_iso_week:02d}'
+    f'&heading={_open_week_date.strftime("%A")}"'
+)
+
+reflect = (
+    'i3-msg "workspace --no-auto-back-and-forth 1:🟢" && '
+    '/usr/bin/obsidian "obsidian://adv-uri?vault=personal'
+    f'&filename={_iso_year}-W{_iso_week:02d}&heading=Reflect"'
+)
 
 current_day = datetime.now().astimezone().day
 
@@ -335,6 +349,13 @@ COMMANDS: dict[str, str] = {
         "tabbed",
         "open_journal_work",
         "open_zk",
+        "thursday",
+        "tuesday",
+        "wednesday",
+        "monday",
+        "friday",
+        "saturday",
+        "sunday",
         "open_personal",
         "open_social",
         "open_week",
@@ -527,8 +548,9 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     "night_fast_ritual_spring_thinker": StartupPreset(
         [
             ([8, 1], ("journal work", "phase"), (open_journal_work, EVENT_POMODORO_BEGIN)),
-            ([7, 1], ("journal day", "phase"), (open_week, "pomodoro_done")),
-            ([8, 4], ("reflect a note", "tidy"), (f"sleep 80;{turn_off_command}", "pomodoro_done"),),
+            ([7, 1], ("journal day", "phase"), (open_week, EVENT_POMODORO_BEGIN)),
+            ([8, 1], ("reflect a note", "phase"), (reflect, EVENT_POMODORO_BEGIN)),
+            ([1, 0], ("going to sleep",""),(f"sleep 80;{turn_off_command}", "pomodoro_done")),
         ],
         str(ARC_SOUNDTRACK),
         "30 min, fast version of night ritual",
@@ -538,7 +560,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             ([15, 1], ("applications", "phase"), (applications, EVENT_SESSION_START)),
             ([9, 1], ("review arc", "phase"), (current_arc, EVENT_POMODORO_BEGIN)),
             ([8, 1], ("budget", "phase"), (budget, EVENT_POMODORO_BEGIN)),
-            ([2, 6], ("log metrics", "break 6 min"), (metrics, EVENT_POMODORO_BEGIN)),
+            ([2, 6], ("log metrics", "break 6 min")), # (metrics, EVENT_POMODORO_BEGIN)),
             (
                 [7, 1],
                 ("journal/work", "phase"),
@@ -549,7 +571,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 ("journal/day", "phase"),
                 (open_week, EVENT_POMODORO_BEGIN),
             ),
-            ([7, 3], ("reflect a note", "tidy")),
+            ([7, 3], ("reflect a note", "tidy"), (reflect, EVENT_POMODORO_BEGIN)),
             (
                 [8, 6],
                 ("plan morning ritual", "tidy"),
