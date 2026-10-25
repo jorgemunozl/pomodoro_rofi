@@ -39,12 +39,12 @@ from pomodoro_lib.constants import (
     PAUSE_TS,
     POMO_DIR,
     POMODORO_DEFAULTS,
-    print_preset_times,
     SKIP_RANDOM_FILE,
     SOUNDS_DIR,
     STATE_FILE,
     TEST_PHASE_SECS,
     WORK_BELL_PLAYED,
+    print_preset_times,
 )
 from pomodoro_lib.rofi import (
     pick_video,
@@ -1694,7 +1694,8 @@ def _start_preset_session(
         warm_up_secs = 0
     elif start_path is not None and start_path.is_file():
         arc_mode = False
-        audio_only = False
+        # A .mp3 start_dir is audio only (no fullscreen video window)
+        audio_only = start_path.suffix.lower() == ".mp3"
         silence_secs = ARC_SILENCE_SECONDS
         # Look up warm-up from video presets
         rhythm_data = _lookup_default_rhythm(start_path.name)

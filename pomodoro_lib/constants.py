@@ -553,6 +553,13 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         str(None),
         "Monday and thursday call to Jeff",
     ),
+    "sunday_task_spring_thinker": StartupPreset(
+        [
+            ([55, 0], ("sunday task, reset the week!", "phase")),
+        ],
+        str(POMO_DIR / "nate.mp3"),
+        "sunday task",
+    ),
     "night_fast_ritual_spring_thinker": StartupPreset(
         [
             (
