@@ -818,7 +818,7 @@ class TimerController:
         return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
     # ── Internal timer ────────────────────────────────────────────────────
-    def _run_timer(self, seconds: int, callback: Callable[[], None]) -> None:
+    def _run_timer(self, seconds: float, callback: Callable[[], None]) -> None:
         self._thread = threading.Thread(
             target=self._timer_thread, args=(seconds, callback), daemon=True
         )
@@ -1092,6 +1092,12 @@ class TimerController:
         self.state = PomodoroState.load(STATE_FILE)
         if not self.state.is_active:
             return
+        if PAUSE_FILE.exists():
+            return
+        remaining = self.state.end_ts - time.time()
+        if remaining > 0:
+            self._run_timer(remaining, self._on_phase_end)
+            return
         self._dispatch_transition()
 
     def _dispatch_transition(self) -> None:
@@ -1118,6 +1124,12 @@ class TimerController:
             return
         self.state = PomodoroState.load(STATE_FILE)
         if not self.state.is_active or self.state.phase != "work":
+            return
+        if PAUSE_FILE.exists():
+            return
+        remaining = self.state.end_ts - time.time()
+        if remaining > 0:
+            self._run_timer(remaining, self._on_work_end)
             return
         self._dispatch_transition()
 
