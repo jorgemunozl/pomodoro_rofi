@@ -12,6 +12,8 @@ from pomodoro_lib.commands import (
     EVENT_BELL_BEGIN,
     EVENT_BELL_END,
     CommandRunner,
+    commands_enabled,
+    set_commands_enabled,
 )
 from pomodoro_lib.config import CHAINS, EVENT_COMMANDS, STARTUP_PRESETS
 from pomodoro_lib.constants import (
@@ -1998,6 +2000,9 @@ Commands:
     pomodoro stop                   Stop current session
     pomodoro next                   Skip to the next phase
     pomodoro log                    Show today's command log
+    pomodoro commands [on|off|toggle|status]
+                                    Enable/disable event commands globally
+                                    (takes effect immediately, even mid-session)
     pomodoro random                 Play all videos randomly (background)
     pomodoro skip_random            Skip to the next random video
     pomodoro start [options]        Start a session with CLI arguments
@@ -2099,6 +2104,31 @@ def _handle_list() -> None:
         print(f"  {name:<20} {cmd}")
 
 
+def _handle_commands(args: list[str]) -> None:
+    """Enable, disable, or inspect global event-command execution."""
+    action = args[0].lower() if args else "toggle"
+
+    if action in ("on", "enable", "enabled", "true", "1"):
+        set_commands_enabled(True)
+        print("Event commands enabled.")
+    elif action in ("off", "disable", "disabled", "false", "0"):
+        set_commands_enabled(False)
+        print("Event commands disabled.")
+    elif action == "toggle":
+        enabled = not commands_enabled()
+        set_commands_enabled(enabled)
+        print(f"Event commands {'enabled' if enabled else 'disabled'}.")
+    elif action in ("status", "show"):
+        status = "enabled" if commands_enabled() else "disabled"
+        print(f"Event commands are {status}.")
+    else:
+        print(
+            "usage: pomodoro commands [on|off|toggle|status]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def _handle_command(name: str) -> None:
     """Run a named command from the COMMANDS registry (fire and forget)."""
     cmd = COMMANDS.get(name)
@@ -2134,6 +2164,8 @@ def _run_subcommand(args: list[str]) -> None:
         _handle_start(args[1:])
     elif cmd == "log":
         _handle_log()
+    elif cmd == "commands":
+        _handle_commands(args[1:])
     elif cmd == "random":
         _handle_random()
     elif cmd == "skip_random":
@@ -2144,8 +2176,8 @@ def _run_subcommand(args: list[str]) -> None:
         _handle_chain(cmd)
     else:
         print(
-            "usage: pomodoro {status|toggle|stop|next|start|log|random|"
-            "<preset>|<chain>}   (pomodoro --help for all options)",
+            "usage: pomodoro {status|toggle|stop|next|start|log|commands|"
+            "random|<preset>|<chain>}   (pomodoro --help for all options)",
             file=sys.stderr,
         )
         sys.exit(1)

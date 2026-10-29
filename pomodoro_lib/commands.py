@@ -41,10 +41,40 @@ context variable.
 
 import logging
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 _LOGGER = logging.getLogger(__name__)
+
+# ── Global enable flag ───────────────────────────────────────────────────────
+# Shared across every process (UI, polybar, timers). Read on every event so
+# the flag can be flipped while a session is already running.
+COMMANDS_FLAG_FILE = Path(tempfile.gettempdir()) / "pomo_commands_enabled"
+
+_FALSE_VALUES = {"0", "false", "off", "no", "disabled"}
+
+
+def commands_enabled(flag_path: Path | None = None) -> bool:
+    """Return whether event commands are currently enabled.
+
+    Missing or unreadable flag file counts as enabled.
+    """
+    path = flag_path or COMMANDS_FLAG_FILE
+    try:
+        raw = path.read_text().strip().lower()
+    except (FileNotFoundError, OSError):
+        return True
+    return raw not in _FALSE_VALUES
+
+
+def set_commands_enabled(
+    enabled: bool, flag_path: Path | None = None
+) -> None:
+    """Persist the global enabled flag for all processes."""
+    path = flag_path or COMMANDS_FLAG_FILE
+    path.write_text("true" if enabled else "false")
+
 
 # ── Event names ──────────────────────────────────────────────────────────────
 # These are the canonical event names. Users reference them in EVENT_COMMANDS.
@@ -150,19 +180,24 @@ class CommandRunner:
         self,
         commands: EventCommands | None = None,
         log_path: Path | None = None,
+        flag_path: Path | None = None,
     ) -> None:
         self._commands: EventCommands = commands or {}
         self._log_path = log_path
+        self._flag_path = flag_path
 
     # ── Public API ───────────────────────────────────────────────────────────
 
     def run(self, event: str, **context: object) -> None:
         """Execute commands registered for *event*, substituting context.
 
-        Silently ignores unknown events (no-op).
+        Silently ignores unknown events (no-op). When the global flag is
+        disabled, no commands run.
         """
         entries = self._commands.get(event)
         if not entries:
+            return
+        if not commands_enabled(self._flag_path):
             return
         for entry in entries:
             self._execute(entry, context)
