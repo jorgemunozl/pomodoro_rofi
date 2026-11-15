@@ -84,6 +84,7 @@ class StartupPreset:
 
 ARC_SOUNDTRACKS_PAST = Path.home() / "Videos" / "past-arc"
 ARC_ENERGYZING_PAST = ARC_SOUNDTRACKS_PAST / "energyzing"  # energized subset
+ARC_SADNESS_PAST = ARC_SOUNDTRACKS_PAST / "sadness"  # sadness subset
 
 REFLECTION_SECS = 60  # silence after final pomodoro before finish sound
 
@@ -548,7 +549,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
             ([10, 1], ("greet", "phase")),
             ([10, 1], ("science", "phase")),
             ([8, 5], ("special", "phase")),
-            ([22, 2], ("chess", "goodbye"), (open_chess, EVENT_POMODORO_BEGIN)),
+            ([22, 2], ("personal task", "goodbye"), (open_chess, EVENT_POMODORO_BEGIN)),
         ],
         str(None),
         "Monday and thursday call to Jeff",
@@ -575,7 +576,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 (f"sleep 80;{turn_off_command}", "pomodoro_done"),
             ),
         ],
-        str(ARC_SOUNDTRACK),
+        str(ARC_SADNESS_PAST),
         "30 min, fast version of night ritual",
     ),
     "night_ritual_spring_thinker": StartupPreset(
@@ -609,7 +610,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
                 (f"{ligth_nets} & sleep 120; {turn_off_command}", "pomodoro_done"),
             ),
         ],  # 87
-        str(ARC_SOUNDTRACK),
+        str(ARC_SADNESS_PAST),
         "spring night begin at eight",
     ),
 }
