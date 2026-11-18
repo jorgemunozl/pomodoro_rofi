@@ -35,6 +35,7 @@ from pomodoro_lib.constants import (
     cliamp_play,
     cliamp_start,
     cliamp_stop,
+    cliamp_toggle,
 )
 from pomodoro_lib.state import PomodoroState
 
@@ -335,6 +336,11 @@ def resume_cliamp() -> None:
     run_cliamp(cliamp_play)
 
 
+def toggle_cliamp() -> None:
+    """Toggle CLIAMP playback."""
+    run_cliamp(cliamp_toggle)
+
+
 def stop_cliamp() -> None:
     """Stop CLIAMP playback."""
     run_cliamp(cliamp_stop)
@@ -369,6 +375,7 @@ def start_mpv(
                 "mpv",
                 "--no-terminal",
                 "--no-video",
+                "--loop-playlist=inf",
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 "--playlist=" + str(pl),
             ],
@@ -734,6 +741,18 @@ class TimerController:
             self.resume()
         else:
             self.pause()
+
+    def toggle_sound(self) -> bool:
+        """Toggle music without changing the Pomodoro timer."""
+        if not STATE_FILE.exists():
+            return False
+        self.state = PomodoroState.load(STATE_FILE)
+        if not self.state.is_active:
+            return False
+        if self.state.cliamp_mode:
+            toggle_cliamp()
+            return True
+        return mpv_cmd('{"command": ["cycle", "mute"]}')
 
     def skip_phase(self) -> None:
         """Skip the current phase (work→break or break→work).

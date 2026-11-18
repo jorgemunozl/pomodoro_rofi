@@ -1999,6 +1999,8 @@ Commands:
     pomodoro toggle                 Pause/resume current session
     pomodoro stop                   Stop current session
     pomodoro next                   Skip to the next phase
+    pomodoro --toggle-sound         Toggle music without changing the timer
+                                    (--toogle-sound is also accepted)
     pomodoro log                    Show today's command log
     pomodoro commands [on|off|toggle|status]
                                     Enable/disable event commands globally
@@ -2147,6 +2149,17 @@ def _handle_command(name: str) -> None:
     )
 
 
+def _handle_toggle_sound() -> None:
+    """Toggle the active session's music without changing the timer."""
+    ctrl = TimerController(cmd_runner=_runner_for_active_session())
+    if not ctrl.toggle_sound():
+        print(
+            "No active session or the session's music player is unavailable.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def _run_subcommand(args: list[str]) -> None:
     """Handle polybar subcommands: status, toggle, stop, next, start."""
     cmd = args[0] if args else ""
@@ -2232,6 +2245,8 @@ def main() -> None:
             _handle_list()
         elif args[0] in ("--preset-time", "--preset_time"):
             print_preset_times()
+        elif args[0] in ("--toggle-sound", "--toogle-sound"):
+            _handle_toggle_sound()
         # --command <name>  →  run a named command
         elif args[0] in ("--command", "-command"):
             if len(args) < 2:

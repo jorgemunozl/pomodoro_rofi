@@ -343,6 +343,7 @@ CLIAMP_PLAYLIST = "lofi"
 cliamp_start = "cliamp --daemon"
 cliamp_pause = "cliamp pause"
 cliamp_play = "cliamp play"
+cliamp_toggle = "cliamp toggle"
 cliamp_stop = "cliamp stop"
 
 
@@ -578,6 +579,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         ],
         str(ARC_SADNESS_PAST),
         "30 min, fast version of night ritual",
+        silence_secs=15,
     ),
     "night_ritual_spring_thinker": StartupPreset(
         [
@@ -612,6 +614,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         ],  # 87
         str(ARC_SADNESS_PAST),
         "spring night begin at eight",
+        silence_secs=15,
     ),
 }
 
