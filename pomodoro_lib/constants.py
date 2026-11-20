@@ -58,6 +58,9 @@ class StartupPreset:
     notify_phases: dict | None = field(default=None, kw_only=True)
     say_label: bool = field(default=True, kw_only=True)
     bell: bool = field(default=False, kw_only=True)  # play bell sounds
+    continuous_audio: bool = field(
+        default=False, kw_only=True
+    )  # keep music playing through breaks
 
     @property
     def timing_schedule(self) -> list[list]:
@@ -534,6 +537,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         str(ARC_ENERGYZING_PAST),
         "after nap, pray already did it,1:05 to 2",
         silence_secs=15,
+        continuous_audio=True,
     ),
     "afternoon_bus_spring_thinker": StartupPreset(
         [
@@ -580,6 +584,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         str(ARC_SADNESS_PAST),
         "30 min, fast version of night ritual",
         silence_secs=15,
+        continuous_audio=True,
     ),
     "night_ritual_spring_thinker": StartupPreset(
         [
@@ -615,6 +620,7 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
         str(ARC_SADNESS_PAST),
         "spring night begin at eight",
         silence_secs=15,
+        continuous_audio=True,
     ),
 }
 

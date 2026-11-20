@@ -164,6 +164,7 @@ def _status_line() -> str:
     # Fade ARC music volume during the last 15 seconds of a work phase
     if (
         state.arc_mode
+        and not state.continuous_audio
         and state.phase == "work"
         and not PAUSE_FILE.exists()
         and not (state.remaining_seconds > work_total)  # not in warm-up
@@ -1678,7 +1679,7 @@ def _start_preset_session(
     # Directory → arc_mode (build shuffled playlist from directory contents)
     # File      → audio_only (play a single video's audio track)
     cliamp_mode = False
-    continuous_audio = False
+    continuous_audio = preset.continuous_audio
     start_path = Path(preset.start_dir) if preset.start_dir else None
 
     if preset.start_dir == CLIAMP_PLAYLIST:
