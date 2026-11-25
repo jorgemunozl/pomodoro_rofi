@@ -2168,6 +2168,18 @@ def _run_subcommand(args: list[str]) -> None:
 
     if cmd == "status":
         print(_status_line())
+    elif cmd == "watch":
+        # Long-lived polybar feed (module with `tail = true`): one process
+        # instead of a fresh Python start-up every second. _status_line()
+        # still runs the expired-phase handling on each tick.
+        while True:
+            try:
+                print(_status_line(), flush=True)
+            except BrokenPipeError:
+                return
+            except Exception:
+                print("", flush=True)
+            time.sleep(1)
     elif cmd == "toggle":
         ctrl.toggle()
     elif cmd == "stop":
@@ -2200,6 +2212,57 @@ def _run_subcommand(args: list[str]) -> None:
 # ── Main menu loop ─────────────────────────────────────────────────────────
 
 
+def _music_choices() -> list[tuple[str, dict]]:
+    """Music sources selectable mid-session: (label, switch_music kwargs)."""
+    choices: list[tuple[str, dict]] = [
+        ("lofi", {"video": "CLIAMP", "cliamp_mode": True}),
+        (
+            "current-arc",
+            {"video": str(ARC_SOUNDTRACK), "arc_mode": True},
+        ),
+        (
+            "music-ost",
+            {"video": str(PAST_ARC_FILE), "arc_mode": True},
+        ),
+    ]
+    if POMO_DIR.is_dir():
+        for mp3 in sorted(POMO_DIR.glob("*.mp3")):
+            name = mp3.stem.lower().replace("_", "-")
+            if name == "dr-old":
+                continue
+            # Prefer the sibling video path so per-video rules still match
+            video = next(
+                (
+                    str(mp3.with_suffix(ext))
+                    for ext in (".mp4", ".webm")
+                    if mp3.with_suffix(ext).exists()
+                ),
+                str(mp3),
+            )
+            choices.append((name, {"video": video, "audio_only": True}))
+    return choices
+
+
+def _handle_change_music(ctrl: TimerController) -> bool:
+    """Rofi menu to swap the music of a running session. True if switched."""
+    choices = _music_choices()
+    labels = [label for label, _ in choices] + [BACK_LABEL]
+    picked = rofi_menu("Change music", labels, no_custom=True)
+    if picked is None or picked == BACK_LABEL:
+        return False
+    for label, kwargs in choices:
+        if label == picked:
+            if ctrl.switch_music(**kwargs):
+                notify("🍅 Pomodoro", f"Music → {label} (timer unchanged)")
+                return True
+    return False
+
+
+def _session_has_music(state: PomodoroState) -> bool:
+    """Music sessions only — not fullscreen video pomodoros."""
+    return state.cliamp_mode or state.arc_mode or state.audio_only
+
+
 def _run_ui() -> None:
     """Launch the rofi UI.
 
@@ -2210,14 +2273,17 @@ def _run_ui() -> None:
 
     while True:
         if STATE_FILE.exists():
-            options = [
-                "▶  New session",
-                "🔄  Reset everything",
-            ]
+            options = ["▶  New session"]
+            if _session_has_music(PomodoroState.load(STATE_FILE)):
+                options.append("🎵  Change music")
+            options.append("🔄  Reset everything")
             action = rofi_menu("Pomodoro", options, no_custom=True)
             if action is None:
                 sys.exit(0)
-            if action.startswith("▶"):
+            if action.startswith("🎵"):
+                if _handle_change_music(ctrl):
+                    sys.exit(0)
+            elif action.startswith("▶"):
                 if _handle_new_session(ctrl):
                     sys.exit(0)
             elif action.startswith("🔄"):

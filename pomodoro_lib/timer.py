@@ -309,8 +309,10 @@ def _ensure_cliamp_playlist() -> None:
     )
 
 
-def start_cliamp() -> None:
+def start_cliamp(autoplay: bool = True) -> None:
     """Start CLIAMP playback of the lofi station.
+
+    With ``autoplay=False`` the playlist is loaded but left paused.
 
     Launches the daemon if needed, then explicitly loads the lofi playlist.
     Never relies on ``--auto-play`` resume, which would replay whatever
@@ -323,7 +325,8 @@ def start_cliamp() -> None:
             if _cliamp_running():
                 break
             time.sleep(0.1)
-    run_cliamp(f"cliamp load {CLIAMP_PLAYLIST} --auto-play")
+    flag = " --auto-play" if autoplay else ""
+    run_cliamp(f"cliamp load {CLIAMP_PLAYLIST}{flag}")
 
 
 def pause_cliamp() -> None:
@@ -364,8 +367,14 @@ def start_mpv(
     audio_only: bool = False,
     arc_mode: bool = False,
     silence_secs: int = ARC_SILENCE_SECONDS,
+    paused: bool = False,
 ) -> None:
-    """Launch mpv with the given video file (or playlist for arc_mode)."""
+    """Launch mpv with the given video file (or playlist for arc_mode).
+
+    ``paused=True`` starts mpv already paused (used when switching music
+    during a break or a paused session).
+    """
+    pause_flag = ["--pause"] if paused else []
     if arc_mode:
         pl = build_arc_playlist(Path(video), silence_secs)
         if pl is None:
@@ -375,6 +384,7 @@ def start_mpv(
                 "mpv",
                 "--no-terminal",
                 "--no-video",
+                *pause_flag,
                 "--loop-playlist=inf",
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 "--playlist=" + str(pl),
@@ -392,6 +402,7 @@ def start_mpv(
                 "--loop",
                 "--no-terminal",
                 "--no-video",
+                *pause_flag,
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 str(audio_path),
             ],
@@ -409,6 +420,7 @@ def start_mpv(
                     "--fullscreen",
                     "--panscan=1.0",
                     "--no-video-osd",
+                    *pause_flag,
                     "--input-ipc-server=" + str(MPV_SOCKET),
                     video,
                 ],
@@ -735,6 +747,46 @@ class TimerController:
         # Ensure a clean stop event before running the new timer
         self._stop_event.clear()
         self._run_timer(secs_left, self._on_phase_end)
+
+    def switch_music(
+        self,
+        video: str,
+        *,
+        audio_only: bool = False,
+        arc_mode: bool = False,
+        cliamp_mode: bool = False,
+    ) -> bool:
+        """Swap the music source mid-session, keeping the timer untouched.
+
+        end_ts, phase, session counters and pause state are preserved; only
+        the audio player and the state's source fields change. Returns False
+        when there is no active session.
+        """
+        if not STATE_FILE.exists():
+            return False
+        self.state = PomodoroState.load(STATE_FILE)
+
+        # Tear down the current player
+        if self.state.cliamp_mode:
+            stop_cliamp()
+        else:
+            kill_mpv()
+
+        self.state.video = video
+        self.state.audio_only = audio_only
+        self.state.arc_mode = arc_mode
+        self.state.cliamp_mode = cliamp_mode
+
+        # Start the new source paused if the session is paused or on a break
+        paused = PAUSE_FILE.exists() or (
+            self.state.phase in ("break", "reflect") and self._pause_on_break()
+        )
+        if cliamp_mode:
+            start_cliamp(autoplay=not paused)
+        else:
+            start_mpv(video, audio_only, arc_mode, paused=paused)
+        self.save_state()
+        return True
 
     def toggle(self) -> None:
         if PAUSE_FILE.exists():
