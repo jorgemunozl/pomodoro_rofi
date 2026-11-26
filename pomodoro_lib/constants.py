@@ -97,6 +97,11 @@ TEST_PHASE_SECS = 7  # phase length in a preset's --test run
 
 PAST_ARC_FILE = Path.home() / "Videos" / "music"
 
+QUOTES_DIR = Path.home() / "Videos" / "quotes"  # one sub-dir per quote arc
+QUOTES_SILENCE_SECS = 35  # same gap as the quotes tool (~/dotfiles/quotes)
+# Daily-limit state shared with the quotes tool: {"date": ISO, "heard": [names]}
+QUOTES_STATE_FILE = Path("/tmp/quotes_daily_state.json")
+
 # ── Commands ────────────────────────────────────────────────────────────────
 tabbed = 'alacritty -e "i3-msg layout tabbed"'
 
@@ -461,7 +466,13 @@ COUNT_OPTIONS = [
     ("4 pomodoros", 4),
     ("5 pomodoros", 5),
     ("6 pomodoros", 6),
+    ("8 pomodoros", 8),
 ]
+
+# An 8-pomodoro session is shown in polybar as two blocks of 4, with a
+# congratulation on the break after the first block.
+BLOCK_SESSION_TOTAL = 8
+BLOCK_SIZE = 4
 
 BACK_LABEL = "↩ Back"
 
@@ -624,7 +635,43 @@ STARTUP_PRESETS_SPRING_THINKER: dict[str, StartupPreset] = {
     ),
 }
 
-STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = STARTUP_PRESETS_SPRING_THINKER
+
+
+def _music_hour(source: str, label: str, silence_secs: int = ARC_SILENCE_SECONDS) -> StartupPreset:
+    """One hour of music: a single 50-10 pomodoro, building block for chains."""
+    return StartupPreset(
+        [([50, 10], (label, "break"))],
+        source,
+        f"one hour 50-10 of {label}",
+        silence_secs=silence_secs,
+        say_label=False,
+    )
+
+
+# One-hour music presets (``pomodoro hour_lofi``), used by CHAINS in config.py
+HOUR_PRESETS: dict[str, StartupPreset] = {
+    "hour_lofi": _music_hour(CLIAMP_PLAYLIST, "lofi"),
+    "hour_current_arc": _music_hour(str(ARC_SOUNDTRACK), "current arc"),
+    "hour_current_arc_energyzed": _music_hour(
+        str(ARC_ENERGYZING), "current arc energyzed", silence_secs=25
+    ),
+    "hour_music_ost": _music_hour(str(PAST_ARC_FILE), "music ost"),
+    "hour_music_ost_energyzed": _music_hour(
+        str(ARC_ENERGYZING_PAST), "music ost energyzed", silence_secs=30
+    ),
+    "hour_steven": _music_hour(str(POMO_DIR / "steven.mp3"), "steven"),
+    "hour_dr": _music_hour(str(POMO_DIR / "dr.mp3"), "dr"),
+    "hour_nate": _music_hour(str(POMO_DIR / "nate.mp3"), "nate"),
+    "hour_math": _music_hour(str(POMO_DIR / "math.mp3"), "math"),
+    "hour_darkacademia": _music_hour(
+        str(POMO_DIR / "darkacademia.mp3"), "dark academia"
+    ),
+}
+
+STARTUP_PRESETS_REGISTRY: dict[str, StartupPreset] = {
+    **STARTUP_PRESETS_SPRING_THINKER,
+    **HOUR_PRESETS,
+}
 
 STARTUP_PRESETS_REGISTRY_RESEARCHY: dict[str, StartupPreset] = {
     "morning_wakeup_winter_researchy": StartupPreset(

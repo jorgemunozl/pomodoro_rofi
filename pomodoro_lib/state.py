@@ -5,6 +5,8 @@ import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from pomodoro_lib.constants import ARC_SILENCE_SECONDS
+
 
 @dataclass
 class PomodoroState:
@@ -18,6 +20,10 @@ class PomodoroState:
     warm_up_secs: int = 0  # video intro seconds before actual focus begins
     audio_only: bool = False  # play mp3 instead of video
     arc_mode: bool = False  # playlist from ARC_SOUNDTRACK with silence gaps
+    silence_secs: int = ARC_SILENCE_SECONDS  # gap between ARC tracks
+    return_to: dict = field(
+        default_factory=dict
+    )  # music to resume after a play-once source (quotes) ends; switch_music kwargs
     cliamp_mode: bool = False  # audio via the CLIAMP daemon (lofi radio) instead of mpv
     continuous_audio: bool = False  # keep audio playing through breaks (never pause)
     bell: bool = True  # play bell sounds (presets default to off)

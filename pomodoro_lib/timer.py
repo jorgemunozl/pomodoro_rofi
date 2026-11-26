@@ -14,6 +14,8 @@ from pomodoro_lib.constants import (
     ARC_SOUNDTRACK,
     BELL_30_PLAYED,
     BELL_BEGIN_PLAYED,
+    BLOCK_SESSION_TOTAL,
+    BLOCK_SIZE,
     CLIAMP_LOFI_URL,
     CLIAMP_PLAYLIST,
     EXTRA_WORK_SECS,
@@ -368,13 +370,16 @@ def start_mpv(
     arc_mode: bool = False,
     silence_secs: int = ARC_SILENCE_SECONDS,
     paused: bool = False,
+    loop: bool = True,
 ) -> None:
     """Launch mpv with the given video file (or playlist for arc_mode).
 
     ``paused=True`` starts mpv already paused (used when switching music
-    during a break or a paused session).
+    during a break or a paused session). ``loop=False`` plays an arc
+    playlist once and lets mpv exit at the end (quotes).
     """
     pause_flag = ["--pause"] if paused else []
+    loop_flag = ["--loop-playlist=inf"] if loop else []
     if arc_mode:
         pl = build_arc_playlist(Path(video), silence_secs)
         if pl is None:
@@ -385,7 +390,7 @@ def start_mpv(
                 "--no-terminal",
                 "--no-video",
                 *pause_flag,
-                "--loop-playlist=inf",
+                *loop_flag,
                 "--input-ipc-server=" + str(MPV_SOCKET),
                 "--playlist=" + str(pl),
             ],
@@ -430,6 +435,17 @@ def start_mpv(
         else:
             return
     PID_FILE.write_text(str(proc.pid))
+
+
+def mpv_alive() -> bool:
+    """True if the mpv started by start_mpv is still running (not a zombie)."""
+    try:
+        pid = int(PID_FILE.read_text().strip())
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except (OSError, ValueError):
+        return False
+    # Field 3 (after "pid (comm)") is the process state; Z = zombie
+    return stat.rsplit(")", 1)[-1].split()[0] != "Z"
 
 
 def kill_mpv() -> None:
@@ -622,6 +638,7 @@ class TimerController:
             schedule_labels=schedule_labels or [],
             audio_only=audio_only,
             arc_mode=arc_mode,
+            silence_secs=silence_secs,
             cliamp_mode=cliamp_mode,
             continuous_audio=continuous_audio,
             bell=bell,
@@ -755,16 +772,35 @@ class TimerController:
         audio_only: bool = False,
         arc_mode: bool = False,
         cliamp_mode: bool = False,
+        silence_secs: int = ARC_SILENCE_SECONDS,
+        once: bool = False,
     ) -> bool:
         """Swap the music source mid-session, keeping the timer untouched.
 
         end_ts, phase, session counters and pause state are preserved; only
         the audio player and the state's source fields change. Returns False
         when there is no active session.
+
+        ``once=True`` (quotes) plays the playlist a single time and records
+        the current music in ``return_to``; restore_music_if_done() switches
+        back to it when the playlist ends.
         """
         if not STATE_FILE.exists():
             return False
         self.state = PomodoroState.load(STATE_FILE)
+
+        if once:
+            # Keep the original music when hopping between play-once sources
+            if not self.state.return_to:
+                self.state.return_to = {
+                    "video": self.state.video,
+                    "audio_only": self.state.audio_only,
+                    "arc_mode": self.state.arc_mode,
+                    "cliamp_mode": self.state.cliamp_mode,
+                    "silence_secs": self.state.silence_secs,
+                }
+        else:
+            self.state.return_to = {}
 
         # Tear down the current player
         if self.state.cliamp_mode:
@@ -776,6 +812,7 @@ class TimerController:
         self.state.audio_only = audio_only
         self.state.arc_mode = arc_mode
         self.state.cliamp_mode = cliamp_mode
+        self.state.silence_secs = silence_secs
 
         # Start the new source paused if the session is paused or on a break
         paused = PAUSE_FILE.exists() or (
@@ -784,9 +821,20 @@ class TimerController:
         if cliamp_mode:
             start_cliamp(autoplay=not paused)
         else:
-            start_mpv(video, audio_only, arc_mode, paused=paused)
+            start_mpv(
+                video, audio_only, arc_mode, silence_secs, paused=paused, loop=not once
+            )
         self.save_state()
         return True
+
+    def restore_music_if_done(self) -> bool:
+        """Return to the previous music once a play-once source has ended."""
+        if not STATE_FILE.exists():
+            return False
+        state = PomodoroState.load(STATE_FILE)
+        if not state.return_to or mpv_alive():
+            return False
+        return self.switch_music(**state.return_to)
 
     def toggle(self) -> None:
         if PAUSE_FILE.exists():
@@ -1030,6 +1078,20 @@ class TimerController:
             phase=self.state.phase,
         )
 
+        if (
+            self.state.total == BLOCK_SESSION_TOTAL
+            and next_sess - 1 == BLOCK_SIZE
+        ):
+            self._notify(
+                "🎉 First block done!",
+                f"{BLOCK_SIZE}/{self.state.total} pomodoros — halfway there, "
+                "great work!\n"
+                f"☕ {self.state.break_min}min break, then block 2.",
+                phase="pomodoro_done",
+                session=self.state.current - 1,
+            )
+            return
+
         self._notify(
             "🍅 Session done!",
             f"{self.state.work_min}min complete.\n"
@@ -1086,6 +1148,7 @@ class TimerController:
                 start_mpv(target_path, audio_only=True, arc_mode=target_arc)
                 self.state.video = target_path
                 self.state.arc_mode = target_arc
+                self.state.return_to = {}  # scheduled switch wins over quotes
                 self.state.arc_switches.pop(0)
 
                 # Look up warm-up seconds if switching to a known video
@@ -1131,6 +1194,8 @@ class TimerController:
             mpv_cmd('{"command": ["set_property", "volume", 100]}')
         if self._pause_on_break():
             self._resume_audio()
+        # A play-once source (quotes) that ended → back to the previous music
+        self.restore_music_if_done()
         # If the socket was stale (mpv died), restart it (not for CLIAMP mode)
         if not MPV_SOCKET.exists() and STATE_FILE.exists():
             state = PomodoroState.load(STATE_FILE)
@@ -1139,6 +1204,7 @@ class TimerController:
                     state.video,
                     audio_only=state.audio_only,
                     arc_mode=state.arc_mode,
+                    silence_secs=state.silence_secs,
                 )
         # Clean up bell flags from the just-ended break
         BELL_30_PLAYED.unlink(missing_ok=True)

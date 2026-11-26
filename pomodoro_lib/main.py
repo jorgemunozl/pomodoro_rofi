@@ -17,6 +17,8 @@ from pomodoro_lib.commands import (
 )
 from pomodoro_lib.config import CHAINS, EVENT_COMMANDS, STARTUP_PRESETS
 from pomodoro_lib.constants import (
+    ARC_ENERGYZING,
+    ARC_ENERGYZING_PAST,
     ARC_SILENCE_SECONDS,
     ARC_SOUNDTRACK,
     BACK_LABEL,
@@ -25,6 +27,8 @@ from pomodoro_lib.constants import (
     BELL_BEGIN_FILE,
     BELL_BEGIN_PLAYED,
     BELL_END_FILE,
+    BLOCK_SESSION_TOTAL,
+    BLOCK_SIZE,
     CLIAMP_LOFI_URL,
     CLIAMP_PLAYLIST,
     CMD_LOG_FILE,
@@ -41,6 +45,9 @@ from pomodoro_lib.constants import (
     PAUSE_TS,
     POMO_DIR,
     POMODORO_DEFAULTS,
+    QUOTES_DIR,
+    QUOTES_SILENCE_SECS,
+    QUOTES_STATE_FILE,
     SKIP_RANDOM_FILE,
     SOUNDS_DIR,
     STATE_FILE,
@@ -126,6 +133,8 @@ def _status_line() -> str:
     runner = _runner_for_active_session()
     ctrl = TimerController(cmd_runner=runner)
     ctrl.handle_expired()
+    # Quotes play once; when they end, go back to the music from before
+    ctrl.restore_music_if_done()
 
     # Re-check after transition (e.g. the session may have completed)
     if not STATE_FILE.exists():
@@ -245,6 +254,16 @@ def _status_line() -> str:
                     f"{icon} {mins:02d}:{secs_rem:02d}  "
                     f"{state.schedule_labels[label_idx]}"
                 )
+    if state.total == BLOCK_SESSION_TOTAL:
+        # Two blocks of BLOCK_SIZE. In a break, `current` is already the
+        # next session, so the one just finished is current - 1.
+        done = state.current - 1 if state.phase == "break" else state.current
+        if state.phase == "break" and done == BLOCK_SIZE:
+            return f"{icon} {mins:02d}:{secs_rem:02d}  🎉 block 1 done!"
+        shown = state.current
+        block = (shown - 1) // BLOCK_SIZE + 1
+        pos = (shown - 1) % BLOCK_SIZE + 1
+        return f"{icon} {mins:02d}:{secs_rem:02d}  block {block} · {pos}/{BLOCK_SIZE}"
     return f"{icon} {mins:02d}:{secs_rem:02d}  {state.current}/{state.total}"
 
 
@@ -1820,25 +1839,34 @@ def _handle_chain(name: str) -> None:
     if chain.description:
         print(f"   {chain.description}")
 
-    for i, step in enumerate(chain.steps, 1):
+    steps = chain.steps
+    if chain.random_pool:
+        import random
+
+        steps = random.sample(
+            chain.random_pool, min(chain.random_count, len(chain.random_pool))
+        )
+        print(f"   🎲 drawn: {', '.join(steps)}")
+
+    for i, step in enumerate(steps, 1):
         try:
             item, day_note = _resolve_chain_step(step)
         except ValueError as exc:
             raise ValueError(f"Chain '{name}' step {i}: {exc}") from exc
         if day_note:
-            print(f"\n⛓  [{i}/{len(chain.steps)}] {day_note}")
+            print(f"\n⛓  [{i}/{len(steps)}] {day_note}")
 
         if item in STARTUP_PRESETS:
-            print(f"\n⛓  [{i}/{len(chain.steps)}] Preset: {item}")
+            print(f"\n⛓  [{i}/{len(steps)}] Preset: {item}")
             ctrl = _start_preset_session(item)
         else:
             video_name = str(item)
-            print(f"\n⛓  [{i}/{len(chain.steps)}] Video: {video_name}")
+            print(f"\n⛓  [{i}/{len(steps)}] Video: {video_name}")
             ctrl = _start_video_session(video_name)
 
         interrupted = _run_session_loop(ctrl)
         if interrupted:
-            print(f"\n⛓  Chain '{name}' stopped at step {i}/{len(chain.steps)}.")
+            print(f"\n⛓  Chain '{name}' stopped at step {i}/{len(steps)}.")
             return
 
     print(f"\n⛓  Chain '{name}' complete! \U0001f389")
@@ -2212,6 +2240,34 @@ def _run_subcommand(args: list[str]) -> None:
 # ── Main menu loop ─────────────────────────────────────────────────────────
 
 
+def _quotes_heard_today() -> list[str]:
+    """Quote arcs already heard today (shared with the quotes tool)."""
+    import json
+    from datetime import date
+
+    try:
+        data = json.loads(QUOTES_STATE_FILE.read_text())
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict) or data.get("date") != date.today().isoformat():
+        return []
+    heard = data.get("heard", [])
+    return heard if isinstance(heard, list) else []
+
+
+def _mark_quote_heard(arc_name: str) -> None:
+    """Record a quote arc as heard today, honouring the one-per-arc limit."""
+    import json
+    from datetime import date
+
+    heard = _quotes_heard_today()
+    if arc_name not in heard:
+        heard.append(arc_name)
+    QUOTES_STATE_FILE.write_text(
+        json.dumps({"date": date.today().isoformat(), "heard": heard})
+    )
+
+
 def _music_choices() -> list[tuple[str, dict]]:
     """Music sources selectable mid-session: (label, switch_music kwargs)."""
     choices: list[tuple[str, dict]] = [
@@ -2221,10 +2277,56 @@ def _music_choices() -> list[tuple[str, dict]]:
             {"video": str(ARC_SOUNDTRACK), "arc_mode": True},
         ),
         (
+            "current-arc-energyzed",
+            {
+                "video": str(ARC_ENERGYZING),
+                "arc_mode": True,
+                "silence_secs": 25,
+            },
+        ),
+        (
             "music-ost",
             {"video": str(PAST_ARC_FILE), "arc_mode": True},
         ),
+        (
+            "music-ost-energyzed",
+            {
+                "video": str(ARC_ENERGYZING_PAST),
+                "arc_mode": True,
+                "silence_secs": 30,
+            },
+        ),
     ]
+    # The noon ritual's soundtrack, with the preset's own silence gap
+    noon = STARTUP_PRESETS.get("noon_ritual_spring_thinker")
+    if noon is not None and noon.start_dir:
+        choices.append(
+            (
+                "noon-ritual",
+                {
+                    "video": noon.start_dir,
+                    "arc_mode": Path(noon.start_dir).is_dir(),
+                    "audio_only": True,
+                    "silence_secs": noon.silence_secs,
+                },
+            )
+        )
+    if QUOTES_DIR.is_dir():
+        heard = set(_quotes_heard_today())
+        for arc in sorted(d for d in QUOTES_DIR.iterdir() if d.is_dir()):
+            if arc.name in heard:
+                continue  # daily limit: each quote arc once per day
+            choices.append(
+                (
+                    f"quotes-{arc.name.lower().replace('_', '-')}",
+                    {
+                        "video": str(arc),
+                        "arc_mode": True,
+                        "silence_secs": QUOTES_SILENCE_SECS,
+                        "once": True,  # no loop; then back to prior music
+                    },
+                )
+            )
     if POMO_DIR.is_dir():
         for mp3 in sorted(POMO_DIR.glob("*.mp3")):
             name = mp3.stem.lower().replace("_", "-")
@@ -2253,6 +2355,8 @@ def _handle_change_music(ctrl: TimerController) -> bool:
     for label, kwargs in choices:
         if label == picked:
             if ctrl.switch_music(**kwargs):
+                if Path(kwargs["video"]).parent == QUOTES_DIR:
+                    _mark_quote_heard(Path(kwargs["video"]).name)
                 notify("🍅 Pomodoro", f"Music → {label} (timer unchanged)")
                 return True
     return False
